@@ -5,6 +5,7 @@ import { ThemeProvider, createTheme } from '@mui/material';
 import { store } from './store/store';
 import Navbar from './components/Navbar';
 import Farms from './pages/Farms';
+import FarmDetail from './pages/FarmDetail';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -38,6 +39,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Farms />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/farm/:id"
+              element={
+                <ProtectedRoute>
+                  <FarmDetail />
                 </ProtectedRoute>
               }
             />
