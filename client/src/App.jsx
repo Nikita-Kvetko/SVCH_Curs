@@ -6,17 +6,14 @@ import { store } from './store/store';
 import Navbar from './components/Navbar';
 import Farms from './pages/Farms';
 import FarmDetail from './pages/FarmDetail';
+import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
 const theme = createTheme({
   palette: {
-    primary: {
-      main: '#2e7d32',
-    },
-    secondary: {
-      main: '#ff8f00',
-    },
+    primary: { main: '#2e7d32' },
+    secondary: { main: '#ff8f00' },
   },
 });
 
@@ -47,6 +44,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <FarmDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
                 </ProtectedRoute>
               }
             />
