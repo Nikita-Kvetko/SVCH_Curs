@@ -7,6 +7,7 @@ import Navbar from './components/Navbar';
 import Farms from './pages/Farms';
 import FarmDetail from './pages/FarmDetail';
 import Dashboard from './pages/Dashboard';
+import Tasks from './pages/Tasks';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -52,6 +53,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tasks"
+              element={
+                <ProtectedRoute>
+                  <Tasks />
                 </ProtectedRoute>
               }
             />
