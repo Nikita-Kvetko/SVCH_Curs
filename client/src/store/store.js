@@ -5,6 +5,7 @@ import bookingsReducer from './bookingSlice';
 import favoritesReducer from './favoriteSlice';
 import userReducer from './userSlice';
 import tasksReducer from './taskSlice';
+import reportsReducer from './reportSlice';
 
 export const store = configureStore({
   reducer: {
@@ -14,5 +15,6 @@ export const store = configureStore({
     favorites: favoritesReducer,
     user: userReducer,
     tasks: tasksReducer,
+    reports: reportsReducer,
   },
 });
