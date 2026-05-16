@@ -8,6 +8,7 @@ import Farms from './pages/Farms';
 import FarmDetail from './pages/FarmDetail';
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
+import Reports from './pages/Reports';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -61,6 +62,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Tasks />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <Reports />
                 </ProtectedRoute>
               }
             />

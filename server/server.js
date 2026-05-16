@@ -183,3 +183,99 @@ app.patch('/api/tasks/:id/complete', (req, res) => {
     res.status(404).json({ error: 'Task not found' });
   }
 });
+
+// Mock saved reports
+let mockSavedReports = [];
+
+// Financial report
+app.get('/api/reports/financial', (req, res) => {
+  const { startDate, endDate, farmId } = req.query;
+  
+  const mockData = {
+    bookings: [
+      {
+        id: 'b1',
+        farm_name: 'Зелёная долина',
+        start_date: '2024-06-01',
+        end_date: '2024-06-30',
+        total_price: 25000,
+        status: 'approved',
+      },
+      {
+        id: 'b2',
+        farm_name: 'Урожайное поле',
+        start_date: '2024-06-15',
+        end_date: '2024-07-15',
+        total_price: 45000,
+        status: 'pending',
+      },
+      {
+        id: 'b3',
+        farm_name: 'Лесная поляна',
+        start_date: '2024-05-10',
+        end_date: '2024-06-10',
+        total_price: 18000,
+        status: 'completed',
+      },
+    ],
+    summary: {
+      total_bookings: 3,
+      total_revenue: 88000,
+      average_booking_value: 29333,
+    },
+  };
+  
+  res.json(mockData);
+});
+
+// Tasks report
+app.get('/api/reports/tasks', (req, res) => {
+  const mockData = {
+    tasks: [
+      { id: 't1', title: 'Полив томатов', farm_name: 'Зелёная долина', due_date: '2024-06-15', priority: 'high', is_completed: false, overdue: false },
+      { id: 't2', title: 'Внесение удобрений', farm_name: 'Урожайное поле', due_date: '2024-06-20', priority: 'medium', is_completed: false, overdue: false },
+      { id: 't3', title: 'Проверка оборудования', farm_name: 'Зелёная долина', due_date: '2024-06-05', priority: 'high', is_completed: true, overdue: false },
+      { id: 't4', title: 'Сбор урожая', farm_name: 'Приволье', due_date: '2024-05-25', priority: 'high', is_completed: false, overdue: true },
+    ],
+    summary: {
+      total: 4,
+      completed: 1,
+      pending: 2,
+      overdue: 1,
+    },
+  };
+  res.json(mockData);
+});
+
+// Crops report
+app.get('/api/reports/crops', (req, res) => {
+  const mockData = {
+    crops: [
+      { id: 'c1', crop_name: 'Пшеница', farm_name: 'Урожайное поле', area_hectares: 10, yield_kg: 35000, yield_per_hectare: 3500, target_yield: 4000 },
+      { id: 'c2', crop_name: 'Томаты', farm_name: 'Зелёная долина', area_hectares: 2, yield_kg: 12000, yield_per_hectare: 6000, target_yield: 5000 },
+      { id: 'c3', crop_name: 'Подсолнечник', farm_name: 'Приволье', area_hectares: 5, yield_kg: 10000, yield_per_hectare: 2000, target_yield: 2500 },
+    ],
+    summary: {
+      total_crops: 3,
+      total_yield: 57000,
+      avg_yield: 3833,
+    },
+  };
+  res.json(mockData);
+});
+
+// Save report
+app.post('/api/reports', (req, res) => {
+  const newReport = {
+    id: Date.now().toString(),
+    ...req.body,
+    created_at: new Date().toISOString(),
+  };
+  mockSavedReports.unshift(newReport);
+  res.json(newReport);
+});
+
+// Get saved reports
+app.get('/api/reports/my', (req, res) => {
+  res.json(mockSavedReports);
+});
