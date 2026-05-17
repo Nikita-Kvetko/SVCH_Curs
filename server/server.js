@@ -279,3 +279,74 @@ app.post('/api/reports', (req, res) => {
 app.get('/api/reports/my', (req, res) => {
   res.json(mockSavedReports);
 });
+
+// Admin middleware (mock)
+const adminAuth = (req, res, next) => {
+  // В реальном проекте проверяйте роль из JWT
+  next();
+};
+
+// Get all users (admin)
+app.get('/api/admin/users', adminAuth, (req, res) => {
+  const mockUsers = [
+    { id: '1', name: 'Администратор', email: 'admin@agri.com', phone: '+7 (999) 111-22-33', location: 'Москва', role: 'admin', is_blocked: false, created_at: '2024-01-01' },
+    { id: '2', name: 'Иван Петров', email: 'ivan@example.com', phone: '+7 (999) 123-45-67', location: 'Московская обл.', role: 'landowner', is_blocked: false, created_at: '2024-02-15' },
+    { id: '3', name: 'Екатерина Смирнова', email: 'ekaterina@example.com', phone: '+7 (888) 765-43-21', location: 'Краснодар', role: 'farmer', is_blocked: false, created_at: '2024-03-10' },
+    { id: '4', name: 'Алексей Новиков', email: 'alexey@example.com', phone: '+7 (777) 111-22-33', location: 'СПб', role: 'farmer', is_blocked: true, created_at: '2024-01-20' },
+  ];
+  res.json({ users: mockUsers, total: mockUsers.length });
+});
+
+// Update user role
+app.put('/api/admin/users/:userId/role', adminAuth, (req, res) => {
+  const { role } = req.body;
+  res.json({ id: req.params.userId, role, name: 'Тестовый пользователь', email: 'test@test.com', is_blocked: false, created_at: '2024-01-01' });
+});
+
+// Toggle user block
+app.patch('/api/admin/users/:userId/block', adminAuth, (req, res) => {
+  const { isBlocked } = req.body;
+  res.json({ id: req.params.userId, is_blocked: isBlocked, name: 'Тестовый пользователь', email: 'test@test.com', role: 'farmer', created_at: '2024-01-01' });
+});
+
+// Delete user
+app.delete('/api/admin/users/:userId', adminAuth, (req, res) => {
+  res.status(204).send();
+});
+
+// Get all farms (admin)
+app.get('/api/admin/farms', adminAuth, (req, res) => {
+  res.json({ farms: mockFarms.map(f => ({ ...f, owner: { name: 'Иван Петров' } })), total: mockFarms.length });
+});
+
+// Update farm (admin)
+app.put('/api/admin/farms/:farmId', adminAuth, (req, res) => {
+  const farm = mockFarms.find(f => f.id === req.params.farmId);
+  res.json({ ...farm, ...req.body });
+});
+
+// Delete farm (admin)
+app.delete('/api/admin/farms/:farmId', adminAuth, (req, res) => {
+  res.status(204).send();
+});
+
+// Get all bookings (admin)
+app.get('/api/admin/bookings', adminAuth, (req, res) => {
+  const mockBookings = [
+    { id: 'b1', farm: { name: 'Зелёная долина' }, farmer: { name: 'Екатерина Смирнова' }, start_date: '2024-06-01', end_date: '2024-06-30', total_price: 25000, status: 'approved', created_at: '2024-05-01' },
+    { id: 'b2', farm: { name: 'Урожайное поле' }, farmer: { name: 'Алексей Новиков' }, start_date: '2024-07-15', end_date: '2024-08-15', total_price: 45000, status: 'pending', created_at: '2024-05-10' },
+  ];
+  res.json({ bookings: mockBookings, total: mockBookings.length });
+});
+
+// Platform stats
+app.get('/api/admin/stats', adminAuth, (req, res) => {
+  res.json({
+    total_users: 124,
+    total_farms: 18,
+    total_bookings: 156,
+    total_revenue: 2450000,
+    active_users: 89,
+    completed_tasks: 234,
+  });
+});
