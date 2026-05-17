@@ -6,6 +6,7 @@ import favoritesReducer from './favoriteSlice';
 import userReducer from './userSlice';
 import tasksReducer from './taskSlice';
 import reportsReducer from './reportSlice';
+import adminReducer from './adminSlice';
 
 export const store = configureStore({
   reducer: {
@@ -16,5 +17,6 @@ export const store = configureStore({
     user: userReducer,
     tasks: tasksReducer,
     reports: reportsReducer,
+    admin: adminReducer,
   },
 });
