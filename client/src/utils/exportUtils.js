@@ -3,17 +3,14 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
-// Export to PDF
 export const exportToPDF = (data, title, columns, filename) => {
   const doc = new jsPDF('landscape');
   
-  // Add title
   doc.setFontSize(18);
   doc.text(title, 14, 15);
   doc.setFontSize(10);
   doc.text(`Дата генерации: ${new Date().toLocaleString('ru-RU')}`, 14, 25);
   
-  // Add table
   autoTable(doc, {
     head: [columns.map(col => col.label)],
     body: data.map(row => columns.map(col => col.accessor(row))),
@@ -23,11 +20,9 @@ export const exportToPDF = (data, title, columns, filename) => {
     alternateRowStyles: { fillColor: [240, 240, 240] },
   });
   
-  // Save PDF
   doc.save(`${filename}_${new Date().toISOString().slice(0, 19)}.pdf`);
 };
 
-// Export to Excel
 export const exportToExcel = (data, title, columns, filename) => {
   const worksheetData = [
     [title],
@@ -41,7 +36,6 @@ export const exportToExcel = (data, title, columns, filename) => {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
   
-  // Column widths
   worksheet['!cols'] = columns.map(() => ({ wch: 20 }));
   
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
@@ -49,12 +43,11 @@ export const exportToExcel = (data, title, columns, filename) => {
   saveAs(blob, `${filename}_${new Date().toISOString().slice(0, 19)}.xlsx`);
 };
 
-// Format currency
 export const formatCurrency = (value) => {
+  if (!value) return '0 ₽';
   return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(value);
 };
 
-// Format date
 export const formatDate = (dateString) => {
   if (!dateString) return '—';
   return new Date(dateString).toLocaleDateString('ru-RU');

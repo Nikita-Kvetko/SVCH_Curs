@@ -8,10 +8,14 @@ import Farms from './pages/Farms';
 import FarmDetail from './pages/FarmDetail';
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
-import Reports from './pages/Reports';
-import AdminPanel from './pages/AdminPanel';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Reports from './pages/Reports';
+import Chat from './pages/Chat';
+import FertilizerShop from './pages/FertilizerShop';
+import BookingsCalendar from './pages/BookingsCalendar';
+import AdminPanel from './pages/AdminPanel';
+import LandingPage from './pages/LandingPage';
 
 const theme = createTheme({
   palette: {
@@ -32,10 +36,21 @@ function App() {
         <BrowserRouter>
           <Navbar />
           <Routes>
+            {/* Публичные маршруты */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            
+            {/* Главная страница — лендинг для неавторизованных, фермы для авторизованных */}
+            <Route 
+              path="/" 
+              element={
+                localStorage.getItem('token') ? <Farms /> : <LandingPage />
+              } 
+            />
+            
+            {/* Защищённые маршруты */}
             <Route
-              path="/"
+              path="/farms"
               element={
                 <ProtectedRoute>
                   <Farms />
@@ -71,6 +86,30 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Reports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute>
+                  <Chat />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/shop"
+              element={
+                <ProtectedRoute>
+                  <FertilizerShop />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bookings"
+              element={
+                <ProtectedRoute>
+                  <BookingsCalendar />
                 </ProtectedRoute>
               }
             />

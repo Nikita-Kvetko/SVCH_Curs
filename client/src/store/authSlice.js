@@ -15,7 +15,7 @@ export const register = createAsyncThunk('auth/register', async (userData) => {
 
 export const logout = createAsyncThunk('auth/logout', async () => {
   localStorage.removeItem('token');
-  localStorage.removeItem('farmsFilters');
+  localStorage.removeItem('user');
   return null;
 });
 
@@ -57,7 +57,6 @@ const authSlice = createSlice({
       })
       .addCase(logout.fulfilled, (state) => {
         state.user = null;
-        localStorage.removeItem('user');
       });
   },
 });

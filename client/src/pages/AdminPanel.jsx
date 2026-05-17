@@ -1,6 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Typography,
@@ -8,342 +6,334 @@ import {
   Paper,
   Tabs,
   Tab,
-  TextField,
-  InputAdornment,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  TablePagination,
-  Alert,
-  CircularProgress,
+  Button,
   Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
+  IconButton,
+  Alert,
+  CircularProgress
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import PeopleIcon from '@mui/icons-material/People';
-import AgricultureIcon from '@mui/icons-material/Agriculture';
-import BookOnlineIcon from '@mui/icons-material/BookOnline';
-import DashboardIcon from '@mui/icons-material/Dashboard';
 import {
-  fetchAllUsers,
-  fetchAllFarmsAdmin,
-  fetchAllBookingsAdmin,
-  fetchPlatformStats,
-  updateUserRole,
-  toggleUserBlock,
-  deleteUser,
-  updateFarmAdmin,
-  deleteFarmAdmin,
-} from '../store/adminSlice';
-import AdminUserRow from '../components/AdminUserRow';
-import AdminFarmRow from '../components/AdminFarmRow';
-import AdminStatsCards from '../components/AdminStatsCards';
-import dayjs from 'dayjs';
+  Block,
+  CheckCircle,
+  Delete,
+  Edit,
+  AdminPanelSettings,
+  Person,
+  Store,
+  BookOnline
+} from '@mui/icons-material';
+import axios from '../api/axiosConfig';
 
 function TabPanel({ children, value, index }) {
-  return <div hidden={value !== index}>{value === index && <Box sx={{ pt: 2 }}>{children}</Box>}</div>;
+  return (
+    <div hidden={value !== index} style={{ paddingTop: 16 }}>
+      {value === index && children}
+    </div>
+  );
 }
 
 export default function AdminPanel() {
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const { user } = useSelector((state) => state.auth);
-  const { users, farms, bookings, stats, loading, totalUsers, totalFarms, totalBookings } = useSelector((state) => state.admin);
-  
   const [tabValue, setTabValue] = useState(0);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-
-  // Check if user is admin
-  useEffect(() => {
-    if (user && user.role !== 'admin') {
-      navigate('/dashboard');
-    }
-  }, [user, navigate]);
+  const [users, setUsers] = useState([]);
+  const [farms, setFarms] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   useEffect(() => {
-    if (user?.role === 'admin') {
-      dispatch(fetchPlatformStats());
-      dispatch(fetchAllUsers({ page: 0, limit: 100 }));
-      dispatch(fetchAllFarmsAdmin({ page: 0, limit: 100 }));
-      dispatch(fetchAllBookingsAdmin({ page: 0, limit: 100 }));
+    fetchAllData();
+  }, []);
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      const [usersRes, farmsRes, bookingsRes, statsRes] = await Promise.all([
+        axios.get('/admin/users'),
+        axios.get('/admin/farms'),
+        axios.get('/admin/bookings'),
+        axios.get('/admin/stats')
+      ]);
+      setUsers(usersRes.data.users || []);
+      setFarms(farmsRes.data.farms || []);
+      setBookings(bookingsRes.data.bookings || []);
+      setStats(statsRes.data);
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [dispatch, user]);
-
-  const filteredUsers = users.filter(u => 
-    u.name?.toLowerCase().includes(search.toLowerCase()) ||
-    u.email?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const filteredFarms = farms.filter(f =>
-    f.name?.toLowerCase().includes(search.toLowerCase()) ||
-    f.location?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const filteredBookings = bookings.filter(b =>
-    b.farm?.name?.toLowerCase().includes(search.toLowerCase()) ||
-    b.farmer?.name?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleRoleChange = async (userId, role) => {
-    await dispatch(updateUserRole({ userId, role }));
-    dispatch(fetchPlatformStats());
   };
 
-  const handleToggleBlock = async (userId, isBlocked) => {
-    await dispatch(toggleUserBlock({ userId, isBlocked }));
+  const handleBlockUser = async (userId, isBlocked) => {
+    try {
+      await axios.patch(`/admin/users/${userId}/block`, { isBlocked });
+      fetchAllData();
+    } catch (error) {
+      console.error('Error blocking user:', error);
+    }
+  };
+
+  const handleChangeRole = async (userId, role) => {
+    try {
+      await axios.put(`/admin/users/${userId}/role`, { role });
+      fetchAllData();
+    } catch (error) {
+      console.error('Error changing role:', error);
+    }
   };
 
   const handleDeleteUser = async (userId) => {
-    await dispatch(deleteUser(userId));
-    dispatch(fetchPlatformStats());
-  };
-
-  const handleUpdateFarm = async (farmId, farmData) => {
-    await dispatch(updateFarmAdmin({ farmId, farmData }));
+    if (window.confirm('Удалить пользователя?')) {
+      try {
+        await axios.delete(`/admin/users/${userId}`);
+        fetchAllData();
+      } catch (error) {
+        console.error('Error deleting user:', error);
+      }
+    }
   };
 
   const handleDeleteFarm = async (farmId) => {
-    await dispatch(deleteFarmAdmin(farmId));
-    dispatch(fetchPlatformStats());
+    if (window.confirm('Удалить ферму?')) {
+      try {
+        await axios.delete(`/admin/farms/${farmId}`);
+        fetchAllData();
+      } catch (error) {
+        console.error('Error deleting farm:', error);
+      }
+    }
   };
 
-  if (loading && !users.length && !farms.length) {
-    return (
-      <Container sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-        <CircularProgress />
-      </Container>
-    );
-  }
+  const getRoleChip = (role) => {
+    const colors = {
+      admin: 'error',
+      farm_admin: 'warning',
+      landowner: 'primary',
+      farmer: 'success'
+    };
+    const labels = {
+      admin: 'Админ',
+      farm_admin: 'Админ фермы',
+      landowner: 'Владелец',
+      farmer: 'Фермер'
+    };
+    return <Chip label={labels[role] || role} color={colors[role] || 'default'} size="small" />;
+  };
 
-  if (user?.role !== 'admin') {
+  const getStatusChip = (status) => {
+    const colors = {
+      pending: 'warning',
+      approved: 'success',
+      rejected: 'error',
+      completed: 'info',
+      cancelled: 'default'
+    };
+    const labels = {
+      pending: 'Ожидает',
+      approved: 'Подтверждено',
+      rejected: 'Отклонено',
+      completed: 'Завершено',
+      cancelled: 'Отменено'
+    };
+    return <Chip label={labels[status] || status} color={colors[status] || 'default'} size="small" />;
+  };
+
+  if (loading) {
     return (
-      <Container sx={{ py: 4 }}>
-        <Alert severity="error">Доступ запрещён. Требуются права администратора.</Alert>
-      </Container>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <CircularProgress />
+      </Box>
     );
   }
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Панель администратора
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        Управление пользователями, фермами и бронированиями
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+        <AdminPanelSettings sx={{ fontSize: 40, color: '#2e7d32' }} />
+        <Typography variant="h4" component="h1">
+          Панель администратора
+        </Typography>
+      </Box>
 
-      {/* Stats Dashboard */}
-      <AdminStatsCards stats={stats} />
+      {/* Статистика */}
+      {stats && (
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
+          <Paper sx={{ p: 2, textAlign: 'center', minWidth: 120 }}>
+            <Typography variant="h4">{stats.total_users}</Typography>
+            <Typography variant="caption">Пользователей</Typography>
+          </Paper>
+          <Paper sx={{ p: 2, textAlign: 'center', minWidth: 120 }}>
+            <Typography variant="h4">{stats.total_farms}</Typography>
+            <Typography variant="caption">Ферм</Typography>
+          </Paper>
+          <Paper sx={{ p: 2, textAlign: 'center', minWidth: 120 }}>
+            <Typography variant="h4">{stats.total_bookings}</Typography>
+            <Typography variant="caption">Бронирований</Typography>
+          </Paper>
+          <Paper sx={{ p: 2, textAlign: 'center', minWidth: 120 }}>
+            <Typography variant="h4">{stats.total_revenue?.toLocaleString() || 0}₽</Typography>
+            <Typography variant="caption">Доход</Typography>
+          </Paper>
+        </Box>
+      )}
 
-      {/* Search */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <TextField
-          fullWidth
-          placeholder="Поиск..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Paper>
-
-      {/* Tabs */}
-      <Paper sx={{ p: 2 }}>
-        <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
-          <Tab icon={<DashboardIcon />} label="Статистика" />
-          <Tab icon={<PeopleIcon />} label={`Пользователи (${totalUsers})`} />
-          <Tab icon={<AgricultureIcon />} label={`Фермы (${totalFarms})`} />
-          <Tab icon={<BookOnlineIcon />} label={`Бронирования (${totalBookings})`} />
+      <Paper sx={{ width: '100%' }}>
+        <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Tab icon={<Person />} label="Пользователи" />
+          <Tab icon={<Store />} label="Фермы" />
+          <Tab icon={<BookOnline />} label="Бронирования" />
         </Tabs>
 
-        {/* Stats Tab */}
+        {/* Пользователи */}
         <TabPanel value={tabValue} index={0}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { md: '1fr 1fr' }, gap: 2 }}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Последние пользователи</Typography>
-              <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-                {users.slice(0, 5).map(user => (
-                  <Box key={user.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, borderBottom: '1px solid #eee' }}>
-                    <Box>
-                      <Typography variant="body2" fontWeight="medium">{user.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">{user.email}</Typography>
-                    </Box>
-                    <Chip label={user.role === 'admin' ? 'Админ' : user.role === 'landowner' ? 'Владелец' : 'Фермер'} size="small" />
-                  </Box>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                  <TableCell>Имя</TableCell>
+                  <TableCell>Email</TableCell>
+                  <TableCell>Телефон</TableCell>
+                  <TableCell>Локация</TableCell>
+                  <TableCell>Роль</TableCell>
+                  <TableCell>Статус</TableCell>
+                  <TableCell>Действия</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {users.map((user) => (
+                  <TableRow key={user.id} hover>
+                    <TableCell>{user.name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>{user.phone || '—'}</TableCell>
+                    <TableCell>{user.location || '—'}</TableCell>
+                    <TableCell>
+                      <FormControl size="small" sx={{ minWidth: 120 }}>
+                        <Select
+                          value={user.role}
+                          onChange={(e) => handleChangeRole(user.id, e.target.value)}
+                          size="small"
+                        >
+                          <MenuItem value="farmer">Фермер</MenuItem>
+                          <MenuItem value="landowner">Владелец</MenuItem>
+                          <MenuItem value="farm_admin">Админ фермы</MenuItem>
+                          <MenuItem value="admin">Админ</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={user.is_blocked ? 'Заблокирован' : 'Активен'}
+                        color={user.is_blocked ? 'error' : 'success'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <IconButton
+                        size="small"
+                        color={user.is_blocked ? 'success' : 'warning'}
+                        onClick={() => handleBlockUser(user.id, !user.is_blocked)}
+                      >
+                        {user.is_blocked ? <CheckCircle /> : <Block />}
+                      </IconButton>
+                      <IconButton size="small" color="error" onClick={() => handleDeleteUser(user.id)}>
+                        <Delete />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </Box>
-            </Paper>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Последние фермы</Typography>
-              <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-                {farms.slice(0, 5).map(farm => (
-                  <Box key={farm.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, borderBottom: '1px solid #eee' }}>
-                    <Box>
-                      <Typography variant="body2" fontWeight="medium">{farm.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">{farm.location}</Typography>
-                    </Box>
-                    <Chip label={`${Number(farm.price_per_month).toLocaleString()} ₽/мес`} size="small" variant="outlined" />
-                  </Box>
-                ))}
-              </Box>
-            </Paper>
-          </Box>
+              </TableBody>
+            </Table>
+          </TableContainer>
         </TabPanel>
 
-        {/* Users Tab */}
+        {/* Фермы */}
         <TabPanel value={tabValue} index={1}>
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: '#2e7d32' }}>
-                  <TableCell sx={{ color: 'white' }}>Пользователь</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Телефон</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Регион</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Роль</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Статус</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Дата регистрации</TableCell>
-                  <TableCell sx={{ color: 'white' }} align="center">Действия</TableCell>
+                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                  <TableCell>Название</TableCell>
+                  <TableCell>Локация</TableCell>
+                  <TableCell>Площадь (га)</TableCell>
+                  <TableCell>Цена (₽/мес)</TableCell>
+                  <TableCell>Владелец</TableCell>
+                  <TableCell>Статус</TableCell>
+                  <TableCell>Действия</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((user) => (
-                  <AdminUserRow
-                    key={user.id}
-                    user={user}
-                    onRoleChange={handleRoleChange}
-                    onToggleBlock={handleToggleBlock}
-                    onDelete={handleDeleteUser}
-                  />
-                ))}
-                {filteredUsers.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center">Пользователи не найдены</TableCell>
+                {farms.map((farm) => (
+                  <TableRow key={farm.id} hover>
+                    <TableCell>{farm.name}</TableCell>
+                    <TableCell>{farm.location}</TableCell>
+                    <TableCell>{farm.area_hectares}</TableCell>
+                    <TableCell>{Number(farm.price_per_month).toLocaleString()}</TableCell>
+                    <TableCell>{farm.owner?.name || '—'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={farm.is_available ? 'Доступна' : 'Недоступна'}
+                        color={farm.is_available ? 'success' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <IconButton size="small" color="error" onClick={() => handleDeleteFarm(farm.id)}>
+                        <Delete />
+                      </IconButton>
+                    </TableCell>
                   </TableRow>
-                )}
+                ))}
               </TableBody>
             </Table>
           </TableContainer>
-          <TablePagination
-            rowsPerPageOptions={[10, 25, 50]}
-            component="div"
-            count={filteredUsers.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={(e, p) => setPage(p)}
-            onRowsPerPageChange={(e) => setRowsPerPage(parseInt(e.target.value, 10))}
-          />
         </TabPanel>
 
-        {/* Farms Tab */}
+        {/* Бронирования */}
         <TabPanel value={tabValue} index={2}>
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: '#2e7d32' }}>
-                  <TableCell sx={{ color: 'white' }}>Ферма</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Владелец</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Площадь</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Цена</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Статус</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Дата создания</TableCell>
-                  <TableCell sx={{ color: 'white' }} align="center">Действия</TableCell>
+                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
+                  <TableCell>Ферма</TableCell>
+                  <TableCell>Арендатор</TableCell>
+                  <TableCell>Период</TableCell>
+                  <TableCell>Стоимость</TableCell>
+                  <TableCell>Статус</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredFarms.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((farm) => (
-                  <AdminFarmRow
-                    key={farm.id}
-                    farm={farm}
-                    onUpdate={handleUpdateFarm}
-                    onDelete={handleDeleteFarm}
-                  />
-                ))}
-                {filteredFarms.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center">Фермы не найдены</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          <TablePagination
-            rowsPerPageOptions={[10, 25, 50]}
-            component="div"
-            count={filteredFarms.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={(e, p) => setPage(p)}
-            onRowsPerPageChange={(e) => setRowsPerPage(parseInt(e.target.value, 10))}
-          />
-        </TabPanel>
-
-        {/* Bookings Tab */}
-        <TabPanel value={tabValue} index={3}>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: '#2e7d32' }}>
-                  <TableCell sx={{ color: 'white' }}>Ферма</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Фермер</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Период</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Стоимость</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Статус</TableCell>
-                  <TableCell sx={{ color: 'white' }}>Дата бронирования</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredBookings.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((booking) => (
+                {bookings.map((booking) => (
                   <TableRow key={booking.id} hover>
                     <TableCell>{booking.farm?.name || '—'}</TableCell>
                     <TableCell>{booking.farmer?.name || '—'}</TableCell>
                     <TableCell>
-                      {dayjs(booking.start_date).format('DD.MM.YYYY')} — {dayjs(booking.end_date).format('DD.MM.YYYY')}
+                      {booking.start_date} — {booking.end_date}
                     </TableCell>
                     <TableCell>{Number(booking.total_price).toLocaleString()} ₽</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={
-                          booking.status === 'approved' ? 'Подтверждено' :
-                          booking.status === 'pending' ? 'Ожидает' :
-                          booking.status === 'completed' ? 'Завершено' : 'Отклонено'
-                        }
-                        size="small"
-                        color={
-                          booking.status === 'approved' ? 'success' :
-                          booking.status === 'pending' ? 'warning' :
-                          booking.status === 'completed' ? 'info' : 'error'
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>{dayjs(booking.created_at).format('DD.MM.YYYY')}</TableCell>
+                    <TableCell>{getStatusChip(booking.status)}</TableCell>
                   </TableRow>
                 ))}
-                {filteredBookings.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center">Бронирования не найдены</TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           </TableContainer>
-          <TablePagination
-            rowsPerPageOptions={[10, 25, 50]}
-            component="div"
-            count={filteredBookings.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={(e, p) => setPage(p)}
-            onRowsPerPageChange={(e) => setRowsPerPage(parseInt(e.target.value, 10))}
-          />
         </TabPanel>
       </Paper>
     </Container>

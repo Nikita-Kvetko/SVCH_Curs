@@ -1,220 +1,643 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Container,
   Grid,
+  Card,
+  CardContent,
+  Typography,
   TextField,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
   Box,
-  Typography,
   Paper,
   Slider,
-  FormControlLabel,
-  Switch,
   Button,
   Chip,
-  Drawer,
+  CircularProgress,
+  CardMedia,
   IconButton,
-  useMediaQuery,
-  useTheme,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  LinearProgress,
+  Rating,
+  Fab,
+  Badge,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
-import { useDispatch, useSelector } from 'react-redux';
-import FilterListIcon from '@mui/icons-material/FilterList';
+import { useNavigate } from 'react-router-dom';
+import axios from '../api/axiosConfig';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import SquareFootIcon from '@mui/icons-material/SquareFoot';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import BarChartIcon from '@mui/icons-material/BarChart';
 import CloseIcon from '@mui/icons-material/Close';
-import FarmCard from '../components/FarmCard';
-import Loader from '../components/Loader';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import GrassIcon from '@mui/icons-material/Grass';
+import WaterDropIcon from '@mui/icons-material/WaterDrop';
+import BoltIcon from '@mui/icons-material/Bolt';
+import { Bar } from 'react-chartjs-2';
 import {
-  fetchFarms,
-  setSearch,
-  setSortBy,
-  setPriceRange,
-  setAreaRange,
-  setSoilType,
-  setWaterAccess,
-  resetFilters,
-} from '../store/farmsSlice';
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend,
+} from 'chart.js';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, ChartTooltip, Legend);
 
 export default function Farms() {
-  const dispatch = useDispatch();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [mobileFiltersOpen, setMobileFiltersOpen] = React.useState(false);
+  const navigate = useNavigate();
+  const [farms, setFarms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [favorites, setFavorites] = useState([]);
+  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
+  const [yieldData, setYieldData] = useState(null);
+  const [expandedAccordion, setExpandedAccordion] = useState(false);
 
-  const { list, loading, error, filters } = useSelector((state) => state.farms);
-  const { user } = useSelector((state) => state.auth);
+  const [filters, setFilters] = useState({
+    search: '',
+    sortBy: 'price_asc',
+    priceRange: [0, 100000],
+    areaRange: [0, 100],
+    soilType: '',
+    waterAccess: false,
+    electricity: false,
+    cropType: '',
+    minRating: 0,
+  });
 
-  useEffect(() => {
-    const params = {
-      search: filters.search,
-      minPrice: filters.priceRange[0],
-      maxPrice: filters.priceRange[1],
-      minArea: filters.areaRange[0],
-      maxArea: filters.areaRange[1],
-      soilType: filters.soilType,
-      waterAccess: filters.waterAccess,
-      sortBy: filters.sortBy,
-    };
-    dispatch(fetchFarms(params));
-  }, [dispatch, filters]);
+  // Типы культур для фильтрации
+  const cropTypes = [
+    'Зерновые',
+    'Овощи',
+    'Фрукты',
+    'Ягоды',
+    'Зелень',
+    'Технические культуры',
+    'Кормовые культуры',
+  ];
 
   const soilTypes = ['Чернозем', 'Глинистый', 'Песчаный', 'Суглинок', 'Торфяной'];
 
-  const FilterContent = () => (
-    <Box sx={{ p: 2, width: isMobile ? '280px' : 'auto' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">Фильтры</Typography>
-        {isMobile && (
-          <IconButton onClick={() => setMobileFiltersOpen(false)}>
-            <CloseIcon />
-          </IconButton>
-        )}
+  // Загрузка избранного из localStorage
+  useEffect(() => {
+    const savedFavorites = localStorage.getItem('favoriteFarms');
+    if (savedFavorites) {
+      setFavorites(JSON.parse(savedFavorites));
+    }
+  }, []);
+
+  // Загрузка сохранённых фильтров
+  useEffect(() => {
+    const saved = localStorage.getItem('farmsFilters');
+    if (saved) {
+      setFilters(JSON.parse(saved));
+    }
+  }, []);
+
+  // Сохранение фильтров в localStorage
+  useEffect(() => {
+    localStorage.setItem('farmsFilters', JSON.stringify(filters));
+  }, [filters]);
+
+  // Сохранение избранного
+  useEffect(() => {
+    localStorage.setItem('favoriteFarms', JSON.stringify(favorites));
+  }, [favorites]);
+
+  useEffect(() => {
+    fetchFarms();
+  }, [filters]);
+
+  const fetchFarms = async () => {
+    setLoading(true);
+    try {
+      const params = {
+        search: filters.search,
+        minPrice: filters.priceRange[0],
+        maxPrice: filters.priceRange[1],
+        minArea: filters.areaRange[0],
+        maxArea: filters.areaRange[1],
+        soilType: filters.soilType,
+        waterAccess: filters.waterAccess,
+        electricity: filters.electricity,
+        cropType: filters.cropType,
+        minRating: filters.minRating,
+        sortBy: filters.sortBy,
+      };
+      const response = await axios.get('/farms', { params });
+      setFarms(response.data);
+    } catch (error) {
+      console.error('Error fetching farms:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      search: '',
+      sortBy: 'price_asc',
+      priceRange: [0, 100000],
+      areaRange: [0, 100],
+      soilType: '',
+      waterAccess: false,
+      electricity: false,
+      cropType: '',
+      minRating: 0,
+    });
+  };
+
+  const toggleFavorite = (farmId, e) => {
+    e.stopPropagation();
+    if (favorites.includes(farmId)) {
+      setFavorites(favorites.filter(id => id !== farmId));
+    } else {
+      setFavorites([...favorites, farmId]);
+    }
+  };
+
+  const showYieldStats = (farm, e) => {
+    e.stopPropagation();
+    // Моковые данные для графика урожайности
+    setYieldData({
+      farmName: farm.name,
+      crops: [
+        { name: 'Пшеница', yield: 42, target: 50, area: 2.5 },
+        { name: 'Кукуруза', yield: 68, target: 70, area: 1.8 },
+        { name: 'Подсолнечник', yield: 25, target: 30, area: 1.2 },
+        { name: 'Ячмень', yield: 38, target: 45, area: 2.0 },
+      ],
+    });
+    setStatsDialogOpen(true);
+  };
+
+  const getYieldChartData = () => {
+    if (!yieldData) return null;
+    return {
+      labels: yieldData.crops.map(c => c.name),
+      datasets: [
+        {
+          label: 'Фактическая урожайность (ц/га)',
+          data: yieldData.crops.map(c => c.yield),
+          backgroundColor: '#2e7d32',
+          borderRadius: 8,
+        },
+        {
+          label: 'Плановая урожайность (ц/га)',
+          data: yieldData.crops.map(c => c.target),
+          backgroundColor: '#ff8f00',
+          borderRadius: 8,
+        },
+      ],
+    };
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: { mode: 'index', intersect: false },
+    },
+    scales: {
+      y: { title: { display: true, text: 'Урожайность (ц/га)' } },
+    },
+  };
+
+  const activeFiltersCount = [
+    filters.search,
+    filters.soilType,
+    filters.cropType,
+    filters.waterAccess,
+    filters.electricity,
+    filters.minRating > 0,
+    filters.priceRange[0] > 0,
+    filters.priceRange[1] < 100000,
+    filters.areaRange[0] > 0,
+    filters.areaRange[1] < 100,
+  ].filter(Boolean).length;
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+        <CircularProgress />
       </Box>
-
-      <FormControl fullWidth sx={{ mb: 2 }}>
-        <InputLabel>Сортировка</InputLabel>
-        <Select value={filters.sortBy} onChange={(e) => dispatch(setSortBy(e.target.value))} label="Сортировка">
-          <MenuItem value="price_asc">Цена: по возрастанию</MenuItem>
-          <MenuItem value="price_desc">Цена: по убыванию</MenuItem>
-          <MenuItem value="area_asc">Площадь: по возрастанию</MenuItem>
-          <MenuItem value="area_desc">Площадь: по убыванию</MenuItem>
-          <MenuItem value="rating">По рейтингу</MenuItem>
-        </Select>
-      </FormControl>
-
-      <Typography gutterBottom>Цена (₽/мес): {filters.priceRange[0]} - {filters.priceRange[1]}</Typography>
-      <Slider
-        value={filters.priceRange}
-        onChange={(e, v) => dispatch(setPriceRange(v))}
-        min={0}
-        max={100000}
-        step={1000}
-        valueLabelDisplay="auto"
-        sx={{ mb: 2 }}
-      />
-
-      <Typography gutterBottom>Площадь (га): {filters.areaRange[0]} - {filters.areaRange[1]}</Typography>
-      <Slider
-        value={filters.areaRange}
-        onChange={(e, v) => dispatch(setAreaRange(v))}
-        min={0}
-        max={100}
-        step={1}
-        valueLabelDisplay="auto"
-        sx={{ mb: 2 }}
-      />
-
-      <FormControl fullWidth sx={{ mb: 2 }}>
-        <InputLabel>Тип почвы</InputLabel>
-        <Select
-          value={filters.soilType}
-          onChange={(e) => dispatch(setSoilType(e.target.value))}
-          label="Тип почвы"
-        >
-          <MenuItem value="">Все</MenuItem>
-          {soilTypes.map((type) => (
-            <MenuItem key={type} value={type}>{type}</MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-
-      <FormControlLabel
-        control={
-          <Switch
-            checked={filters.waterAccess}
-            onChange={(e) => dispatch(setWaterAccess(e.target.checked))}
-          />
-        }
-        label="Наличие водоснабжения"
-        sx={{ mb: 2, display: 'block' }}
-      />
-
-      <Button variant="outlined" fullWidth onClick={() => dispatch(resetFilters())}>
-        Сбросить все фильтры
-      </Button>
-    </Box>
-  );
-
-  if (loading) return <Loader />;
-  if (error) return <Typography color="error">Ошибка: {error}</Typography>;
+    );
+  }
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Typography variant="h4" component="h1">
-          Доступные фермы
-        </Typography>
-        {isMobile && (
-          <Button startIcon={<FilterListIcon />} onClick={() => setMobileFiltersOpen(true)}>
-            Фильтры
-          </Button>
-        )}
+      <Typography variant="h4" component="h1" gutterBottom>
+        Доступные фермы
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        Найдите идеальное место для ведения сельского хозяйства
+      </Typography>
+
+      {/* Фильтры - аккордеон для мобильных устройств */}
+      <Box sx={{ display: { xs: 'block', md: 'none' }, mb: 2 }}>
+        <Accordion expanded={expandedAccordion} onChange={() => setExpandedAccordion(!expandedAccordion)}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography>Фильтры</Typography>
+              {activeFiltersCount > 0 && (
+                <Chip label={activeFiltersCount} size="small" color="primary" />
+              )}
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails>
+            <FilterContent
+              filters={filters}
+              setFilters={setFilters}
+              soilTypes={soilTypes}
+              cropTypes={cropTypes}
+              resetFilters={resetFilters}
+            />
+          </AccordionDetails>
+        </Accordion>
       </Box>
 
-      <Box sx={{ display: 'flex', gap: 3 }}>
-        {/* Desktop filters - sidebar */}
-        {!isMobile && (
-          <Paper sx={{ width: 300, p: 2, height: 'fit-content', position: 'sticky', top: 80 }}>
-            <FilterContent />
-          </Paper>
-        )}
+      {/* Фильтры - боковая панель для десктопа */}
+      <Box sx={{ display: { xs: 'none', md: 'block' }, mb: 4 }}>
+        <FilterContent
+          filters={filters}
+          setFilters={setFilters}
+          soilTypes={soilTypes}
+          cropTypes={cropTypes}
+          resetFilters={resetFilters}
+        />
+      </Box>
 
-        {/* Mobile filters - drawer */}
-        <Drawer anchor="right" open={mobileFiltersOpen} onClose={() => setMobileFiltersOpen(false)}>
-          <FilterContent />
-        </Drawer>
+      {/* Активные фильтры (чипсы) */}
+      {activeFiltersCount > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+          <Typography variant="body2" sx={{ mr: 1, alignSelf: 'center' }}>
+            Активные фильтры:
+          </Typography>
+          {filters.search && (
+            <Chip label={`Поиск: ${filters.search}`} size="small" onDelete={() => setFilters({ ...filters, search: '' })} />
+          )}
+          {filters.soilType && (
+            <Chip label={`Почва: ${filters.soilType}`} size="small" onDelete={() => setFilters({ ...filters, soilType: '' })} />
+          )}
+          {filters.cropType && (
+            <Chip label={`Культура: ${filters.cropType}`} size="small" onDelete={() => setFilters({ ...filters, cropType: '' })} />
+          )}
+          {filters.waterAccess && (
+            <Chip label="Водоснабжение" size="small" onDelete={() => setFilters({ ...filters, waterAccess: false })} />
+          )}
+          {filters.electricity && (
+            <Chip label="Электричество" size="small" onDelete={() => setFilters({ ...filters, electricity: false })} />
+          )}
+          {filters.minRating > 0 && (
+            <Chip label={`Рейтинг ≥ ${filters.minRating}`} size="small" onDelete={() => setFilters({ ...filters, minRating: 0 })} />
+          )}
+          {(filters.priceRange[0] > 0 || filters.priceRange[1] < 100000) && (
+            <Chip label={`Цена: ${filters.priceRange[0]} - ${filters.priceRange[1]} ₽`} size="small" onDelete={() => setFilters({ ...filters, priceRange: [0, 100000] })} />
+          )}
+          {(filters.areaRange[0] > 0 || filters.areaRange[1] < 100) && (
+            <Chip label={`Площадь: ${filters.areaRange[0]} - ${filters.areaRange[1]} га`} size="small" onDelete={() => setFilters({ ...filters, areaRange: [0, 100] })} />
+          )}
+          <Chip label="Сбросить всё" size="small" color="primary" onClick={resetFilters} />
+        </Box>
+      )}
 
-        {/* Farm grid */}
-        <Box sx={{ flex: 1 }}>
+      {/* Список ферм */}
+      <Grid container spacing={3}>
+        {farms.map((farm) => (
+          <Grid item key={farm.id} xs={12} sm={6} md={4} lg={3}>
+            <Card
+              sx={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                cursor: 'pointer',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 },
+                position: 'relative',
+              }}
+              onClick={() => navigate(`/farm/${farm.id}`)}
+            >
+              {/* Кнопка избранного */}
+              <IconButton
+                sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(255,255,255,0.8)', '&:hover': { bgcolor: 'white' } }}
+                onClick={(e) => toggleFavorite(farm.id, e)}
+              >
+                {favorites.includes(farm.id) ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
+              </IconButton>
+
+              <CardMedia
+                component="img"
+                height="180"
+                image={farm.images?.[0] || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400'}
+                alt={farm.name}
+              />
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Typography gutterBottom variant="h6" component="h2" noWrap>
+                  {farm.name}
+                </Typography>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <LocationOnIcon fontSize="small" color="action" sx={{ mr: 0.5 }} />
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {farm.location}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <AttachMoneyIcon fontSize="small" color="action" sx={{ mr: 0.5 }} />
+                  <Typography variant="body1" color="primary" fontWeight="bold">
+                    {Number(farm.price_per_month).toLocaleString()} ₽/мес
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <SquareFootIcon fontSize="small" color="action" sx={{ mr: 0.5 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    {farm.area_hectares} га
+                  </Typography>
+                </Box>
+
+                {farm.rating > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <Rating value={farm.rating} readOnly size="small" precision={0.5} />
+                    <Typography variant="caption" sx={{ ml: 1 }}>
+                      ({farm.total_reviews})
+                    </Typography>
+                  </Box>
+                )}
+
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                  {farm.water_access && (
+                    <Tooltip title="Есть водоснабжение">
+                      <WaterDropIcon fontSize="small" color="primary" />
+                    </Tooltip>
+                  )}
+                  {farm.electricity && (
+                    <Tooltip title="Есть электричество">
+                      <BoltIcon fontSize="small" color="primary" />
+                    </Tooltip>
+                  )}
+                  {farm.soil_type && (
+                    <Chip label={farm.soil_type} size="small" variant="outlined" />
+                  )}
+                </Box>
+
+                <Button
+                  variant="contained"
+                  fullWidth
+                  sx={{ mt: 'auto' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/farm/${farm.id}`);
+                  }}
+                >
+                  Подробнее
+                </Button>
+
+                <Button
+                  variant="text"
+                  size="small"
+                  fullWidth
+                  sx={{ mt: 1 }}
+                  startIcon={<BarChartIcon />}
+                  onClick={(e) => showYieldStats(farm, e)}
+                >
+                  График урожайности
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      {farms.length === 0 && (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6">Фермы не найдены</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Попробуйте изменить параметры фильтрации
+          </Typography>
+          <Button variant="contained" sx={{ mt: 2 }} onClick={resetFilters}>
+            Сбросить все фильтры
+          </Button>
+        </Paper>
+      )}
+
+      {/* Диалог с графиком урожайности */}
+      <Dialog open={statsDialogOpen} onClose={() => setStatsDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Прогноз урожайности</Typography>
+            <IconButton onClick={() => setStatsDialogOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {yieldData && (
+            <>
+              <Typography variant="subtitle1" gutterBottom>
+                {yieldData.farmName}
+              </Typography>
+              <Box sx={{ height: 300, mb: 3 }}>
+                <Bar data={getYieldChartData()} options={chartOptions} />
+              </Box>
+
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                Детализация по культурам
+              </Typography>
+              <Grid container spacing={2}>
+                {yieldData.crops.map((crop, idx) => (
+                  <Grid item xs={12} key={idx}>
+                    <Paper sx={{ p: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="subtitle2">
+                          <GrassIcon fontSize="small" sx={{ mr: 0.5, verticalAlign: 'middle' }} />
+                          {crop.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Площадь: {crop.area} га
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="caption">Фактическая урожайность</Typography>
+                          <LinearProgress
+                            variant="determinate"
+                            value={(crop.yield / crop.target) * 100}
+                            sx={{ height: 10, borderRadius: 5 }}
+                            color="success"
+                          />
+                        </Box>
+                        <Typography variant="body2">
+                          {crop.yield} / {crop.target} ц/га
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" color={crop.yield >= crop.target ? 'success.main' : 'warning.main'}>
+                        {crop.yield >= crop.target
+                          ? `✅ План перевыполнен на ${((crop.yield / crop.target - 1) * 100).toFixed(0)}%`
+                          : `⚠️ Отставание от плана: ${((1 - crop.yield / crop.target) * 100).toFixed(0)}%`}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </Container>
+  );
+}
+
+// Компонент фильтров (вынесен для переиспользования)
+function FilterContent({ filters, setFilters, soilTypes, cropTypes, resetFilters }) {
+  return (
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="h6" gutterBottom>Фильтры</Typography>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6} md={4}>
           <TextField
             fullWidth
-            placeholder="Поиск ферм по названию..."
+            label="Поиск по названию"
             value={filters.search}
-            onChange={(e) => dispatch(setSearch(e.target.value))}
-            sx={{ mb: 3 }}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            size="small"
           />
+        </Grid>
 
-          {/* Active filters chips */}
-          {(filters.search || filters.soilType || filters.waterAccess || 
-            filters.priceRange[0] > 0 || filters.priceRange[1] < 100000 ||
-            filters.areaRange[0] > 0 || filters.areaRange[1] < 100) && (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-              <Typography variant="body2" sx={{ mr: 1 }}>Активные фильтры:</Typography>
-              {filters.search && (
-                <Chip label={`Поиск: ${filters.search}`} size="small" onDelete={() => dispatch(setSearch(''))} />
-              )}
-              {(filters.priceRange[0] > 0 || filters.priceRange[1] < 100000) && (
-                <Chip label={`Цена: ${filters.priceRange[0]} - ${filters.priceRange[1]} ₽`} size="small" />
-              )}
-              {filters.soilType && (
-                <Chip label={`Почва: ${filters.soilType}`} size="small" onDelete={() => dispatch(setSoilType(''))} />
-              )}
-              {filters.waterAccess && (
-                <Chip label="Водоснабжение" size="small" onDelete={() => dispatch(setWaterAccess(false))} />
-              )}
-              <Chip label="Сбросить всё" size="small" color="primary" onClick={() => dispatch(resetFilters())} />
-            </Box>
-          )}
+        <Grid item xs={12} sm={6} md={4}>
+          <FormControl fullWidth size="small">
+            <InputLabel>Сортировка</InputLabel>
+            <Select
+              value={filters.sortBy}
+              onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
+              label="Сортировка"
+            >
+              <MenuItem value="price_asc">Цена: по возрастанию</MenuItem>
+              <MenuItem value="price_desc">Цена: по убыванию</MenuItem>
+              <MenuItem value="area_asc">Площадь: по возрастанию</MenuItem>
+              <MenuItem value="area_desc">Площадь: по убыванию</MenuItem>
+              <MenuItem value="rating">По рейтингу</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
 
-          {list.length === 0 ? (
-            <Paper sx={{ p: 4, textAlign: 'center' }}>
-              <Typography variant="h6">Ферм не найдено</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Попробуйте изменить параметры фильтрации
-              </Typography>
-            </Paper>
-          ) : (
-            <Grid container spacing={3}>
-              {list.map((farm) => (
-                <Grid item key={farm.id} xs={12} sm={6} md={4} lg={3}>
-                  <FarmCard farm={farm} />
-                </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <FormControl fullWidth size="small">
+            <InputLabel>Тип почвы</InputLabel>
+            <Select
+              value={filters.soilType}
+              onChange={(e) => setFilters({ ...filters, soilType: e.target.value })}
+              label="Тип почвы"
+            >
+              <MenuItem value="">Все</MenuItem>
+              {soilTypes.map(type => (
+                <MenuItem key={type} value={type}>{type}</MenuItem>
               ))}
-            </Grid>
-          )}
-        </Box>
-      </Box>
-    </Container>
+            </Select>
+          </FormControl>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={4}>
+          <FormControl fullWidth size="small">
+            <InputLabel>Рекомендуемая культура</InputLabel>
+            <Select
+              value={filters.cropType}
+              onChange={(e) => setFilters({ ...filters, cropType: e.target.value })}
+              label="Рекомендуемая культура"
+            >
+              <MenuItem value="">Все</MenuItem>
+              {cropTypes.map(type => (
+                <MenuItem key={type} value={type}>{type}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={4}>
+          <Typography gutterBottom variant="body2">
+            Минимальный рейтинг: {filters.minRating} ★
+          </Typography>
+          <Slider
+            value={filters.minRating}
+            onChange={(e, v) => setFilters({ ...filters, minRating: v })}
+            min={0}
+            max={5}
+            step={0.5}
+            size="small"
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6}>
+          <Typography gutterBottom>Цена (₽/мес): {filters.priceRange[0]} - {filters.priceRange[1]}</Typography>
+          <Slider
+            value={filters.priceRange}
+            onChange={(e, v) => setFilters({ ...filters, priceRange: v })}
+            min={0}
+            max={100000}
+            step={5000}
+            valueLabelDisplay="auto"
+            size="small"
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6}>
+          <Typography gutterBottom>Площадь (га): {filters.areaRange[0]} - {filters.areaRange[1]}</Typography>
+          <Slider
+            value={filters.areaRange}
+            onChange={(e, v) => setFilters({ ...filters, areaRange: v })}
+            min={0}
+            max={100}
+            step={5}
+            valueLabelDisplay="auto"
+            size="small"
+          />
+        </Grid>
+
+        <Grid item xs={12}>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={filters.waterAccess}
+                  onChange={(e) => setFilters({ ...filters, waterAccess: e.target.checked })}
+                  size="small"
+                />
+              }
+              label="Водоснабжение"
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={filters.electricity}
+                  onChange={(e) => setFilters({ ...filters, electricity: e.target.checked })}
+                  size="small"
+                />
+              }
+              label="Электричество"
+            />
+            <Button variant="outlined" onClick={resetFilters} size="small">
+              Сбросить фильтры
+            </Button>
+          </Box>
+        </Grid>
+      </Grid>
+    </Paper>
   );
 }
