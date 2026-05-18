@@ -110,15 +110,12 @@ app.get('/api/farms', async (req, res) => {
       sortBy 
     } = req.query;
     
-    // Создаем условия WHERE
     let whereClause = { is_available: true };
     
-    // Поиск по названию
     if (search && search.trim() !== '') {
       whereClause.name = { [Op.iLike]: `%${search.trim()}%` };
     }
     
-    // Фильтр по цене
     if (minPrice && !isNaN(parseFloat(minPrice))) {
       whereClause.price_per_month = { [Op.gte]: parseFloat(minPrice) };
     }
@@ -129,7 +126,6 @@ app.get('/api/farms', async (req, res) => {
       };
     }
     
-    // Фильтр по площади
     if (minArea && !isNaN(parseFloat(minArea))) {
       whereClause.area_hectares = { [Op.gte]: parseFloat(minArea) };
     }
@@ -140,27 +136,22 @@ app.get('/api/farms', async (req, res) => {
       };
     }
     
-    // Фильтр по типу почвы
     if (soilType && soilType !== '') {
       whereClause.soil_type = soilType;
     }
     
-    // Фильтр по водоснабжению
     if (waterAccess === 'true') {
       whereClause.water_access = true;
     }
     
-    // Фильтр по электричеству
     if (electricity === 'true') {
       whereClause.electricity = true;
     }
     
-    // Фильтр по минимальному рейтингу
     if (minRating && !isNaN(parseFloat(minRating))) {
       whereClause.rating = { [Op.gte]: parseFloat(minRating) };
     }
     
-    // Сортировка
     let order = [];
     if (sortBy === 'price_asc') {
       order = [['price_per_month', 'ASC']];
@@ -293,6 +284,24 @@ app.put('/api/bookings/:bookingId/status', auth, async (req, res) => {
   }
 });
 
+// ========== Bookings for farm (для страницы деталей фермы) ==========
+app.get('/api/bookings/farm/:farmId', auth, async (req, res) => {
+  try {
+    const bookings = await Booking.findAll({
+      where: { farm_id: req.params.farmId },
+      include: [
+        { model: Farm, as: 'farm' },
+        { model: User, as: 'farmer', attributes: ['id', 'name', 'email'] }
+      ],
+      order: [['start_date', 'ASC']]
+    });
+    res.json(bookings);
+  } catch (error) {
+    console.error('Error fetching farm bookings:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 // ========== Tasks endpoints ==========
 app.get('/api/tasks', auth, async (req, res) => {
   try {
@@ -320,20 +329,27 @@ app.get('/api/tasks', auth, async (req, res) => {
     });
     res.json(tasks);
   } catch (error) {
-    console.error(error);
+    console.error('Error fetching tasks:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
 app.post('/api/tasks', auth, async (req, res) => {
   try {
+    const { title, description, due_date, priority, task_type, farm_id } = req.body;
     const task = await Task.create({
-      ...req.body,
-      assigned_to: req.userId
+      title,
+      description,
+      due_date,
+      priority: priority || 'medium',
+      task_type: task_type || 'other',
+      farm_id: farm_id || null,
+      assigned_to: req.userId,
+      is_completed: false
     });
     res.json(task);
   } catch (error) {
-    console.error(error);
+    console.error('Error creating task:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -347,7 +363,7 @@ app.put('/api/tasks/:id', auth, async (req, res) => {
     await task.update(req.body);
     res.json(task);
   } catch (error) {
-    console.error(error);
+    console.error('Error updating task:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -357,7 +373,7 @@ app.delete('/api/tasks/:id', auth, async (req, res) => {
     await Task.destroy({ where: { id: req.params.id } });
     res.status(204).send();
   } catch (error) {
-    console.error(error);
+    console.error('Error deleting task:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -419,7 +435,6 @@ app.get('/api/reports/tasks', auth, async (req, res) => {
 
 app.get('/api/reports/yield', auth, async (req, res) => {
   try {
-    // Моковые данные для урожайности (можно заменить на реальные из БД)
     const mockYieldData = {
       crops: [
         { id: 'c1', crop_name: 'Пшеница', farm_name: 'Зелёная долина', area_hectares: 2.5, yield_kg: 8750, yield_per_hectare: 3500, target_yield: 4000 },
@@ -654,43 +669,20 @@ app.get('/api/admin/stats', auth, adminAuth, async (req, res) => {
   }
 });
 
-// Отправка отчета на email
-app.post('/api/reports/send-email', auth, async (req, res) => {
+// ========== Reviews endpoints ==========
+app.get('/api/reviews/farm/:farmId', async (req, res) => {
   try {
-    const { to, reportType, reportData, period } = req.body;
-    
-    const { sendReportEmail } = require('./config/email');
-    
-    const subject = `Отчет ${reportType} за период ${period.startDate} — ${period.endDate}`;
-    
-    let html = `
-      <h2>Agri Coworking - Отчет</h2>
-      <p><strong>Тип отчета:</strong> ${reportType === 'financial' ? 'Финансовый' : reportType === 'tasks' ? 'По задачам' : 'По урожайности'}</p>
-      <p><strong>Период:</strong> ${period.startDate} — ${period.endDate}</p>
-      <p><strong>Всего записей:</strong> ${reportData.length}</p>
-      <hr/>
-      <pre>${JSON.stringify(reportData, null, 2)}</pre>
-    `;
-    
-    const result = await sendReportEmail(to, subject, html);
-    
-    if (result.success) {
-      res.json({ success: true, message: 'Отчет отправлен на email' });
-    } else {
-      res.status(500).json({ error: 'Ошибка отправки email' });
-    }
+    res.json([]);
   } catch (error) {
-    console.error(error);
+    console.error('Error fetching reviews:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-// ========== Reviews endpoints ==========
 app.post('/api/reviews', auth, async (req, res) => {
   try {
     const { farm_id, rating, comment } = req.body;
     
-    // Обновляем рейтинг фермы
     const farm = await Farm.findByPk(farm_id);
     if (farm) {
       const newRating = (farm.rating * farm.total_reviews + rating) / (farm.total_reviews + 1);
@@ -701,6 +693,18 @@ app.post('/api/reviews', auth, async (req, res) => {
     }
     
     res.json({ success: true, message: 'Спасибо за отзыв!' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Отправка отчета на email (заглушка)
+app.post('/api/reports/send-email', auth, async (req, res) => {
+  try {
+    const { to, reportType, reportData, period } = req.body;
+    console.log(`Email would be sent to ${to} with report ${reportType}`);
+    res.json({ success: true, message: 'Отчет отправлен на email (демо режим)' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Ошибка сервера' });
