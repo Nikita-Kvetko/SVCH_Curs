@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { Op } = require('sequelize');
 require('dotenv').config();
 
 const { sequelize, User, Farm, Booking, Task, Report, Message, FertilizerOrder } = require('./models/index');
@@ -93,16 +94,97 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// ========== Farms endpoints ==========
+// ========== Farms endpoints с фильтрацией, поиском и сортировкой ==========
 app.get('/api/farms', async (req, res) => {
   try {
+    const { 
+      search, 
+      minPrice, 
+      maxPrice, 
+      minArea, 
+      maxArea, 
+      soilType, 
+      waterAccess, 
+      electricity, 
+      minRating,
+      sortBy 
+    } = req.query;
+    
+    // Создаем условия WHERE
+    let whereClause = { is_available: true };
+    
+    // Поиск по названию
+    if (search && search.trim() !== '') {
+      whereClause.name = { [Op.iLike]: `%${search.trim()}%` };
+    }
+    
+    // Фильтр по цене
+    if (minPrice && !isNaN(parseFloat(minPrice))) {
+      whereClause.price_per_month = { [Op.gte]: parseFloat(minPrice) };
+    }
+    if (maxPrice && !isNaN(parseFloat(maxPrice))) {
+      whereClause.price_per_month = { 
+        ...whereClause.price_per_month,
+        [Op.lte]: parseFloat(maxPrice) 
+      };
+    }
+    
+    // Фильтр по площади
+    if (minArea && !isNaN(parseFloat(minArea))) {
+      whereClause.area_hectares = { [Op.gte]: parseFloat(minArea) };
+    }
+    if (maxArea && !isNaN(parseFloat(maxArea))) {
+      whereClause.area_hectares = { 
+        ...whereClause.area_hectares,
+        [Op.lte]: parseFloat(maxArea) 
+      };
+    }
+    
+    // Фильтр по типу почвы
+    if (soilType && soilType !== '') {
+      whereClause.soil_type = soilType;
+    }
+    
+    // Фильтр по водоснабжению
+    if (waterAccess === 'true') {
+      whereClause.water_access = true;
+    }
+    
+    // Фильтр по электричеству
+    if (electricity === 'true') {
+      whereClause.electricity = true;
+    }
+    
+    // Фильтр по минимальному рейтингу
+    if (minRating && !isNaN(parseFloat(minRating))) {
+      whereClause.rating = { [Op.gte]: parseFloat(minRating) };
+    }
+    
+    // Сортировка
+    let order = [];
+    if (sortBy === 'price_asc') {
+      order = [['price_per_month', 'ASC']];
+    } else if (sortBy === 'price_desc') {
+      order = [['price_per_month', 'DESC']];
+    } else if (sortBy === 'area_asc') {
+      order = [['area_hectares', 'ASC']];
+    } else if (sortBy === 'area_desc') {
+      order = [['area_hectares', 'DESC']];
+    } else if (sortBy === 'rating') {
+      order = [['rating', 'DESC']];
+    } else {
+      order = [['createdAt', 'DESC']];
+    }
+    
     const farms = await Farm.findAll({
-      where: { is_available: true },
-      include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email'] }]
+      where: whereClause,
+      order: order,
+      include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email', 'phone'] }]
     });
+    
     res.json(farms);
   } catch (error) {
-    console.error(error);
+    console.error('Error in /api/farms:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -214,8 +296,27 @@ app.put('/api/bookings/:bookingId/status', auth, async (req, res) => {
 // ========== Tasks endpoints ==========
 app.get('/api/tasks', auth, async (req, res) => {
   try {
+    const { status, priority, farm_id } = req.query;
+    let whereClause = {};
+    
+    if (status === 'completed') {
+      whereClause.is_completed = true;
+    } else if (status === 'pending') {
+      whereClause.is_completed = false;
+    }
+    
+    if (priority && priority !== 'all') {
+      whereClause.priority = priority;
+    }
+    
+    if (farm_id && farm_id !== 'all') {
+      whereClause.farm_id = farm_id;
+    }
+    
     const tasks = await Task.findAll({
-      include: [{ model: Farm, as: 'farm' }]
+      where: whereClause,
+      include: [{ model: Farm, as: 'farm' }],
+      order: [['due_date', 'ASC']]
     });
     res.json(tasks);
   } catch (error) {
@@ -316,6 +417,28 @@ app.get('/api/reports/tasks', auth, async (req, res) => {
   }
 });
 
+app.get('/api/reports/yield', auth, async (req, res) => {
+  try {
+    // Моковые данные для урожайности (можно заменить на реальные из БД)
+    const mockYieldData = {
+      crops: [
+        { id: 'c1', crop_name: 'Пшеница', farm_name: 'Зелёная долина', area_hectares: 2.5, yield_kg: 8750, yield_per_hectare: 3500, target_yield: 4000 },
+        { id: 'c2', crop_name: 'Кукуруза', farm_name: 'Урожайное поле', area_hectares: 3.0, yield_kg: 15000, yield_per_hectare: 5000, target_yield: 5500 },
+        { id: 'c3', crop_name: 'Подсолнечник', farm_name: 'Лесная поляна', area_hectares: 1.5, yield_kg: 3750, yield_per_hectare: 2500, target_yield: 3000 },
+      ],
+      summary: {
+        total_crops: 3,
+        total_yield: 27500,
+        avg_yield: 3667
+      }
+    };
+    res.json(mockYieldData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 app.post('/api/reports', auth, async (req, res) => {
   try {
     const report = await Report.create({
@@ -346,8 +469,8 @@ app.get('/api/reports/my', auth, async (req, res) => {
 app.get('/api/chat/users', auth, async (req, res) => {
   try {
     const users = await User.findAll({
-      where: { id: { [require('sequelize').Op.ne]: req.userId } },
-      attributes: ['id', 'name', 'role', 'email']
+      where: { id: { [Op.ne]: req.userId } },
+      attributes: ['id', 'name', 'role', 'email', 'phone', 'location']
     });
     res.json(users);
   } catch (error) {
@@ -360,7 +483,7 @@ app.get('/api/chat/messages/:userId', auth, async (req, res) => {
   try {
     const messages = await Message.findAll({
       where: {
-        [require('sequelize').Op.or]: [
+        [Op.or]: [
           { from_user_id: req.userId, to_user_id: req.params.userId },
           { from_user_id: req.params.userId, to_user_id: req.userId }
         ]
@@ -525,6 +648,37 @@ app.get('/api/admin/stats', auth, adminAuth, async (req, res) => {
       active_users: await User.count({ where: { is_blocked: false } }),
       completed_tasks: await Task.count({ where: { is_completed: true } })
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Отправка отчета на email
+app.post('/api/reports/send-email', auth, async (req, res) => {
+  try {
+    const { to, reportType, reportData, period } = req.body;
+    
+    const { sendReportEmail } = require('./config/email');
+    
+    const subject = `Отчет ${reportType} за период ${period.startDate} — ${period.endDate}`;
+    
+    let html = `
+      <h2>Agri Coworking - Отчет</h2>
+      <p><strong>Тип отчета:</strong> ${reportType === 'financial' ? 'Финансовый' : reportType === 'tasks' ? 'По задачам' : 'По урожайности'}</p>
+      <p><strong>Период:</strong> ${period.startDate} — ${period.endDate}</p>
+      <p><strong>Всего записей:</strong> ${reportData.length}</p>
+      <hr/>
+      <pre>${JSON.stringify(reportData, null, 2)}</pre>
+    `;
+    
+    const result = await sendReportEmail(to, subject, html);
+    
+    if (result.success) {
+      res.json({ success: true, message: 'Отчет отправлен на email' });
+    } else {
+      res.status(500).json({ error: 'Ошибка отправки email' });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Ошибка сервера' });

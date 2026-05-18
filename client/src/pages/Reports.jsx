@@ -29,8 +29,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Rating,
   Tooltip,
+  LinearProgress,
 } from '@mui/material';
 import {
   PictureAsPdf,
@@ -39,13 +39,13 @@ import {
   History,
   AttachMoney,
   Assignment,
-  Grass,
+  Grass as GrassIcon,
   Download,
   Visibility,
   Close,
-  BarChart,
+  Email,
 } from '@mui/icons-material';
-import { Bar, Line, Pie } from 'react-chartjs-2';
+import { Bar, Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -53,7 +53,6 @@ import {
   BarElement,
   LineElement,
   PointElement,
-  ArcElement,
   Title,
   Tooltip as ChartTooltip,
   Legend,
@@ -63,13 +62,13 @@ import axios from '../api/axiosConfig';
 import { exportToPDF, exportToExcel, formatCurrency, formatDate } from '../utils/exportUtils';
 import dayjs from 'dayjs';
 
+// Регистрация компонентов ChartJS
 ChartJS.register(
   CategoryScale,
   LinearScale,
   BarElement,
   LineElement,
   PointElement,
-  ArcElement,
   Title,
   ChartTooltip,
   Legend
@@ -153,6 +152,7 @@ export default function Reports() {
       setFinancialData(response.data);
     } catch (error) {
       console.error('Error generating financial report:', error);
+      alert('Ошибка при формировании отчета');
     } finally {
       setLoading(false);
     }
@@ -171,6 +171,7 @@ export default function Reports() {
       setTasksData(response.data);
     } catch (error) {
       console.error('Error generating tasks report:', error);
+      alert('Ошибка при формировании отчета');
     } finally {
       setLoading(false);
     }
@@ -189,6 +190,7 @@ export default function Reports() {
       setYieldData(response.data);
     } catch (error) {
       console.error('Error generating yield report:', error);
+      alert('Ошибка при формировании отчета');
     } finally {
       setLoading(false);
     }
@@ -209,8 +211,31 @@ export default function Reports() {
       alert('Отчёт сохранён в историю');
     } catch (error) {
       console.error('Error saving report:', error);
+      alert('Ошибка при сохранении отчета');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Отправка на email
+  const handleSendEmail = async (reportType, data) => {
+    const userEmail = user?.email;
+    if (!userEmail) {
+      alert('Email пользователя не найден');
+      return;
+    }
+    
+    try {
+      await axios.post('/reports/send-email', {
+        to: userEmail,
+        reportType,
+        reportData: data,
+        period: dateRange
+      });
+      alert('Отчет отправлен на ваш email!');
+    } catch (error) {
+      console.error('Error sending email:', error);
+      alert('Ошибка отправки email');
     }
   };
 
@@ -326,7 +351,7 @@ export default function Reports() {
       if (!monthlyData[month]) {
         monthlyData[month] = { revenue: 0, count: 0 };
       }
-      monthlyData[month].revenue += b.total_price;
+      monthlyData[month].revenue += Number(b.total_price);
       monthlyData[month].count += 1;
     });
     return {
@@ -417,9 +442,9 @@ export default function Reports() {
                               <TableChart />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Скачать">
-                            <IconButton size="small" onClick={() => handleExportPDF(report.report_type, report.data)}>
-                              <Download />
+                          <Tooltip title="Отправить на Email">
+                            <IconButton size="small" onClick={() => handleSendEmail(report.report_type, report.data)}>
+                              <Email />
                             </IconButton>
                           </Tooltip>
                         </Box>
@@ -495,7 +520,7 @@ export default function Reports() {
             <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
               <Tab icon={<AttachMoney />} label="Финансовый отчёт" />
               <Tab icon={<Assignment />} label="Отчёт по задачам" />
-              {isLandowner && <Tab icon={<Grass />} label="Урожайность" />}
+              {isLandowner && <Tab icon={<GrassIcon />} label="Урожайность" />}
             </Tabs>
 
             {/* Финансовый отчёт */}
@@ -528,6 +553,14 @@ export default function Reports() {
                         sx={{ mr: 1 }}
                       >
                         Excel
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        startIcon={<Email />}
+                        onClick={() => handleSendEmail('financial', financialData)}
+                        sx={{ mr: 1 }}
+                      >
+                        Email
                       </Button>
                       <Button
                         variant="outlined"
@@ -651,6 +684,14 @@ export default function Reports() {
                       </Button>
                       <Button
                         variant="outlined"
+                        startIcon={<Email />}
+                        onClick={() => handleSendEmail('tasks', tasksData)}
+                        sx={{ mr: 1 }}
+                      >
+                        Email
+                      </Button>
+                      <Button
+                        variant="outlined"
                         startIcon={<Save />}
                         onClick={() => saveReport('tasks', tasksData)}
                         disabled={saving}
@@ -742,7 +783,7 @@ export default function Reports() {
               )}
             </TabPanel>
 
-            {/* Отчёт по урожайности (только для владельца/админа) */}
+            {/* Отчёт по урожайности */}
             {isLandowner && (
               <TabPanel value={activeTab} index={2}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
@@ -773,6 +814,14 @@ export default function Reports() {
                           sx={{ mr: 1 }}
                         >
                           Excel
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<Email />}
+                          onClick={() => handleSendEmail('yield', yieldData)}
+                          sx={{ mr: 1 }}
+                        >
+                          Email
                         </Button>
                         <Button
                           variant="outlined"
@@ -882,70 +931,13 @@ export default function Reports() {
                 Период: {formatDate(previewData.period_start)} — {formatDate(previewData.period_end)}
               </Typography>
               <Divider sx={{ my: 2 }} />
-              {previewData.report_type === 'financial' && previewData.data?.bookings && (
-                <TableContainer>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Ферма</TableCell>
-                        <TableCell>Период</TableCell>
-                        <TableCell>Стоимость</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {previewData.data.bookings.map((b, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{b.farm_name}</TableCell>
-                          <TableCell>{formatDate(b.start_date)} — {formatDate(b.end_date)}</TableCell>
-                          <TableCell>{formatCurrency(b.total_price)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-              {previewData.report_type === 'tasks' && previewData.data?.tasks && (
-                <TableContainer>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Название</TableCell>
-                        <TableCell>Срок</TableCell>
-                        <TableCell>Статус</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {previewData.data.tasks.map((t, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{t.title}</TableCell>
-                          <TableCell>{formatDate(t.due_date)}</TableCell>
-                          <TableCell>{t.is_completed ? 'Выполнена' : 'В работе'}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-              {previewData.report_type === 'yield' && previewData.data?.crops && (
-                <TableContainer>
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Культура</TableCell>
-                        <TableCell>Урожайность</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {previewData.data.crops.map((c, i) => (
-                        <TableRow key={i}>
-                          <TableCell>{c.crop_name}</TableCell>
-                          <TableCell>{c.yield_per_hectare?.toLocaleString()} кг/га</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
+              <Typography>
+                Всего записей: {
+                  previewData.report_type === 'financial' ? previewData.data?.bookings?.length :
+                  previewData.report_type === 'tasks' ? previewData.data?.tasks?.length :
+                  previewData.data?.crops?.length
+                }
+              </Typography>
             </>
           )}
         </DialogContent>

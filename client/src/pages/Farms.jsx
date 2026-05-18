@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Container,
   Grid,
@@ -45,6 +45,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import GrassIcon from '@mui/icons-material/Grass';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import BoltIcon from '@mui/icons-material/Bolt';
+import SearchIcon from '@mui/icons-material/Search';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -67,6 +68,10 @@ export default function Farms() {
   const [yieldData, setYieldData] = useState(null);
   const [expandedAccordion, setExpandedAccordion] = useState(false);
 
+  // Отдельное состояние для поля поиска (мгновенное обновление)
+  const [searchInput, setSearchInput] = useState('');
+  
+  // Основные фильтры
   const [filters, setFilters] = useState({
     search: '',
     sortBy: 'price_asc',
@@ -92,6 +97,9 @@ export default function Farms() {
 
   const soilTypes = ['Чернозем', 'Глинистый', 'Песчаный', 'Суглинок', 'Торфяной'];
 
+  // Debounce таймер
+  const debounceTimeout = useRef(null);
+
   // Загрузка избранного из localStorage
   useEffect(() => {
     const savedFavorites = localStorage.getItem('favoriteFarms');
@@ -104,12 +112,32 @@ export default function Farms() {
   useEffect(() => {
     const saved = localStorage.getItem('farmsFilters');
     if (saved) {
-      setFilters(JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      setFilters(parsed);
+      setSearchInput(parsed.search || '');
     }
   }, []);
 
-  // Сохранение фильтров в localStorage
+  // Debounce для поиска
   useEffect(() => {
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+    
+    debounceTimeout.current = setTimeout(() => {
+      setFilters(prev => ({ ...prev, search: searchInput }));
+    }, 500);
+    
+    return () => {
+      if (debounceTimeout.current) {
+        clearTimeout(debounceTimeout.current);
+      }
+    };
+  }, [searchInput]);
+
+  // Сохранение фильтров в localStorage (кроме searchInput)
+  useEffect(() => {
+    const { search, ...filtersToSave } = filters;
     localStorage.setItem('farmsFilters', JSON.stringify(filters));
   }, [filters]);
 
@@ -118,6 +146,7 @@ export default function Farms() {
     localStorage.setItem('favoriteFarms', JSON.stringify(favorites));
   }, [favorites]);
 
+  // Загрузка ферм при изменении фильтров
   useEffect(() => {
     fetchFarms();
   }, [filters]);
@@ -134,7 +163,6 @@ export default function Farms() {
         soilType: filters.soilType,
         waterAccess: filters.waterAccess,
         electricity: filters.electricity,
-        cropType: filters.cropType,
         minRating: filters.minRating,
         sortBy: filters.sortBy,
       };
@@ -148,6 +176,7 @@ export default function Farms() {
   };
 
   const resetFilters = () => {
+    setSearchInput('');
     setFilters({
       search: '',
       sortBy: 'price_asc',
@@ -161,6 +190,10 @@ export default function Farms() {
     });
   };
 
+  const handleSearchChange = (e) => {
+    setSearchInput(e.target.value);
+  };
+
   const toggleFavorite = (farmId, e) => {
     e.stopPropagation();
     if (favorites.includes(farmId)) {
@@ -172,7 +205,6 @@ export default function Farms() {
 
   const showYieldStats = (farm, e) => {
     e.stopPropagation();
-    // Моковые данные для графика урожайности
     setYieldData({
       farmName: farm.name,
       crops: [
@@ -266,12 +298,14 @@ export default function Farms() {
               soilTypes={soilTypes}
               cropTypes={cropTypes}
               resetFilters={resetFilters}
+              searchInput={searchInput}
+              handleSearchChange={handleSearchChange}
             />
           </AccordionDetails>
         </Accordion>
       </Box>
 
-      {/* Фильтры - боковая панель для десктопа */}
+      {/* Фильтры - для десктопа */}
       <Box sx={{ display: { xs: 'none', md: 'block' }, mb: 4 }}>
         <FilterContent
           filters={filters}
@@ -279,6 +313,8 @@ export default function Farms() {
           soilTypes={soilTypes}
           cropTypes={cropTypes}
           resetFilters={resetFilters}
+          searchInput={searchInput}
+          handleSearchChange={handleSearchChange}
         />
       </Box>
 
@@ -289,7 +325,10 @@ export default function Farms() {
             Активные фильтры:
           </Typography>
           {filters.search && (
-            <Chip label={`Поиск: ${filters.search}`} size="small" onDelete={() => setFilters({ ...filters, search: '' })} />
+            <Chip label={`Поиск: ${filters.search}`} size="small" onDelete={() => {
+              setSearchInput('');
+              setFilters({ ...filters, search: '' });
+            }} />
           )}
           {filters.soilType && (
             <Chip label={`Почва: ${filters.soilType}`} size="small" onDelete={() => setFilters({ ...filters, soilType: '' })} />
@@ -332,7 +371,6 @@ export default function Farms() {
               }}
               onClick={() => navigate(`/farm/${farm.id}`)}
             >
-              {/* Кнопка избранного */}
               <IconButton
                 sx={{ position: 'absolute', top: 8, right: 8, bgcolor: 'rgba(255,255,255,0.8)', '&:hover': { bgcolor: 'white' } }}
                 onClick={(e) => toggleFavorite(farm.id, e)}
@@ -368,7 +406,7 @@ export default function Farms() {
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                   <SquareFootIcon fontSize="small" color="action" sx={{ mr: 0.5 }} />
                   <Typography variant="body2" color="text.secondary">
-                    {farm.area_hectares} га
+                    {Number(farm.area_hectares).toLocaleString()} га
                   </Typography>
                 </Box>
 
@@ -505,7 +543,7 @@ export default function Farms() {
 }
 
 // Компонент фильтров (вынесен для переиспользования)
-function FilterContent({ filters, setFilters, soilTypes, cropTypes, resetFilters }) {
+function FilterContent({ filters, setFilters, soilTypes, cropTypes, resetFilters, searchInput, handleSearchChange }) {
   return (
     <Paper sx={{ p: 3 }}>
       <Typography variant="h6" gutterBottom>Фильтры</Typography>
@@ -515,9 +553,13 @@ function FilterContent({ filters, setFilters, soilTypes, cropTypes, resetFilters
           <TextField
             fullWidth
             label="Поиск по названию"
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            value={searchInput !== undefined ? searchInput : filters.search}
+            onChange={handleSearchChange || ((e) => setFilters({ ...filters, search: e.target.value }))}
             size="small"
+            InputProps={{
+              startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+            }}
+            placeholder="Введите название фермы..."
           />
         </Grid>
 
@@ -585,7 +627,7 @@ function FilterContent({ filters, setFilters, soilTypes, cropTypes, resetFilters
         </Grid>
 
         <Grid item xs={12} sm={6}>
-          <Typography gutterBottom>Цена (₽/мес): {filters.priceRange[0]} - {filters.priceRange[1]}</Typography>
+          <Typography gutterBottom>Цена (₽/мес): {filters.priceRange[0].toLocaleString()} - {filters.priceRange[1].toLocaleString()} ₽</Typography>
           <Slider
             value={filters.priceRange}
             onChange={(e, v) => setFilters({ ...filters, priceRange: v })}
@@ -598,7 +640,7 @@ function FilterContent({ filters, setFilters, soilTypes, cropTypes, resetFilters
         </Grid>
 
         <Grid item xs={12} sm={6}>
-          <Typography gutterBottom>Площадь (га): {filters.areaRange[0]} - {filters.areaRange[1]}</Typography>
+          <Typography gutterBottom>Площадь (га): {filters.areaRange[0]} - {filters.areaRange[1]} га</Typography>
           <Slider
             value={filters.areaRange}
             onChange={(e, v) => setFilters({ ...filters, areaRange: v })}
