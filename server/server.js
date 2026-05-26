@@ -3,9 +3,10 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { Op } = require('sequelize');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
-const { sequelize, User, Farm, Booking, Task, Report, Message, FertilizerOrder } = require('./models/index');
+const { sequelize, User, Farm, Booking, Task, Report, Message, FertilizerOrder, Review, Crop } = require('./models/index');
 
 const app = express();
 app.use(cors());
@@ -51,6 +52,7 @@ app.post('/api/register', async (req, res) => {
     }
     
     const user = await User.create({
+      id: uuidv4(),
       name,
       email,
       password_hash: bcrypt.hashSync(password, 10),
@@ -94,7 +96,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// ========== Farms endpoints с фильтрацией, поиском и сортировкой ==========
+// ========== Farms endpoints ==========
 app.get('/api/farms', async (req, res) => {
   try {
     const { 
@@ -183,23 +185,38 @@ app.get('/api/farms', async (req, res) => {
 app.get('/api/farms/my', auth, async (req, res) => {
   try {
     const user = await User.findByPk(req.userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    
     let farms = [];
     
     if (user.role === 'landowner') {
       farms = await Farm.findAll({
         where: { owner_id: req.userId },
-        include: [{ model: User, as: 'owner' }]
+        include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email'] }]
       });
-    } else if (user.role === 'farm_admin' && user.managed_farm_id) {
+    } else if (user.role === 'farm_admin') {
+      if (user.managed_farm_id) {
+        const farm = await Farm.findOne({
+          where: { id: user.managed_farm_id },
+          include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email'] }]
+        });
+        if (farm) farms = [farm];
+      }
+    } else {
       farms = await Farm.findAll({
-        where: { id: user.managed_farm_id },
-        include: [{ model: User, as: 'owner' }]
+        where: { is_available: true },
+        include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email'] }],
+        order: [['name', 'ASC']],
+        limit: 100
       });
     }
     
     res.json(farms);
   } catch (error) {
-    console.error(error);
+    console.error('Error in /api/farms/my:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -219,6 +236,135 @@ app.get('/api/farms/:id', async (req, res) => {
   }
 });
 
+// ========== Tasks endpoints ==========
+app.get('/api/tasks', auth, async (req, res) => {
+  try {
+    console.log('GET /api/tasks - User ID:', req.userId);
+    
+    const tasks = await Task.findAll({
+      where: { assigned_to: req.userId },
+      include: [{ model: Farm, as: 'farm', attributes: ['id', 'name'] }],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    console.log(`Found ${tasks.length} tasks`);
+    res.json(tasks);
+  } catch (error) {
+    console.error('Error fetching tasks:', error);
+    res.status(500).json({ error: 'Ошибка сервера: ' + error.message });
+  }
+});
+
+app.post('/api/tasks', auth, async (req, res) => {
+  try {
+    const { title, description, due_date, priority, task_type, farm_id } = req.body;
+    
+    console.log('POST /api/tasks - User ID:', req.userId);
+    console.log('Request body:', req.body);
+    
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: 'Название задачи обязательно' });
+    }
+    
+    // Проверяем существование пользователя
+    const user = await User.findByPk(req.userId);
+    if (!user) {
+      console.error('User not found:', req.userId);
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    
+    // Проверяем ферму если указана
+    if (farm_id) {
+      const farm = await Farm.findByPk(farm_id);
+      if (!farm) {
+        return res.status(404).json({ error: 'Ферма не найдена' });
+      }
+    }
+    
+    const task = await Task.create({
+      id: uuidv4(),
+      title: title.trim(),
+      description: description || null,
+      due_date: due_date || null,
+      priority: priority || 'medium',
+      task_type: task_type || 'other',
+      farm_id: farm_id || null,
+      assigned_to: req.userId,
+      is_completed: false,
+      completed_at: null
+    });
+    
+    const taskWithFarm = await Task.findOne({
+      where: { id: task.id },
+      include: [{ model: Farm, as: 'farm', attributes: ['id', 'name'] }]
+    });
+    
+    console.log('Task created successfully:', task.id);
+    res.status(201).json(taskWithFarm);
+    
+  } catch (error) {
+    console.error('Error creating task:', error);
+    res.status(500).json({ error: 'Ошибка при создании задачи: ' + error.message });
+  }
+});
+
+app.put('/api/tasks/:id', auth, async (req, res) => {
+  try {
+    const task = await Task.findByPk(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({ error: 'Задача не найдена' });
+    }
+    
+    if (task.assigned_to !== req.userId && req.userRole !== 'admin') {
+      return res.status(403).json({ error: 'Нет доступа к этой задаче' });
+    }
+    
+    const { title, description, due_date, priority, task_type, farm_id, is_completed } = req.body;
+    
+    await task.update({
+      title: title || task.title,
+      description: description !== undefined ? description : task.description,
+      due_date: due_date || task.due_date,
+      priority: priority || task.priority,
+      task_type: task_type || task.task_type,
+      farm_id: farm_id !== undefined ? farm_id : task.farm_id,
+      is_completed: is_completed !== undefined ? is_completed : task.is_completed,
+      completed_at: is_completed && !task.is_completed ? new Date() : task.completed_at
+    });
+    
+    const updatedTask = await Task.findOne({
+      where: { id: task.id },
+      include: [{ model: Farm, as: 'farm', attributes: ['id', 'name'] }]
+    });
+    
+    res.json(updatedTask);
+  } catch (error) {
+    console.error('Error updating task:', error);
+    res.status(500).json({ error: 'Ошибка при обновлении задачи' });
+  }
+});
+
+app.delete('/api/tasks/:id', auth, async (req, res) => {
+  try {
+    const task = await Task.findByPk(req.params.id);
+    
+    if (!task) {
+      return res.status(404).json({ error: 'Задача не найдена' });
+    }
+    
+    if (task.assigned_to !== req.userId && req.userRole !== 'admin') {
+      return res.status(403).json({ error: 'Нет доступа к этой задаче' });
+    }
+    
+    await task.destroy();
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting task:', error);
+    res.status(500).json({ error: 'Ошибка при удалении задачи' });
+  }
+});
+
 // ========== Bookings endpoints ==========
 app.get('/api/bookings/my', auth, async (req, res) => {
   try {
@@ -228,18 +374,21 @@ app.get('/api/bookings/my', auth, async (req, res) => {
     if (user.role === 'farmer') {
       bookings = await Booking.findAll({
         where: { farmer_id: req.userId },
-        include: [{ model: Farm, as: 'farm' }]
+        include: [{ model: Farm, as: 'farm' }],
+        order: [['createdAt', 'DESC']]
       });
     } else if (user.role === 'landowner') {
       const userFarms = await Farm.findAll({ where: { owner_id: req.userId } });
       const farmIds = userFarms.map(f => f.id);
       bookings = await Booking.findAll({
         where: { farm_id: farmIds },
-        include: [{ model: Farm, as: 'farm' }, { model: User, as: 'farmer' }]
+        include: [{ model: Farm, as: 'farm' }, { model: User, as: 'farmer' }],
+        order: [['createdAt', 'DESC']]
       });
     } else {
       bookings = await Booking.findAll({
-        include: [{ model: Farm, as: 'farm' }, { model: User, as: 'farmer' }]
+        include: [{ model: Farm, as: 'farm' }, { model: User, as: 'farmer' }],
+        order: [['createdAt', 'DESC']]
       });
     }
     
@@ -254,6 +403,7 @@ app.post('/api/bookings', auth, async (req, res) => {
   try {
     const { farm_id, start_date, end_date, total_price, notes } = req.body;
     const booking = await Booking.create({
+      id: uuidv4(),
       farm_id,
       farmer_id: req.userId,
       start_date,
@@ -271,12 +421,12 @@ app.post('/api/bookings', auth, async (req, res) => {
 
 app.put('/api/bookings/:bookingId/status', auth, async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, cancel_reason } = req.body;
     const booking = await Booking.findByPk(req.params.bookingId);
     if (!booking) {
       return res.status(404).json({ error: 'Бронирование не найдено' });
     }
-    await booking.update({ status });
+    await booking.update({ status, cancel_reason });
     res.json(booking);
   } catch (error) {
     console.error(error);
@@ -284,7 +434,6 @@ app.put('/api/bookings/:bookingId/status', auth, async (req, res) => {
   }
 });
 
-// ========== Bookings for farm (для страницы деталей фермы) ==========
 app.get('/api/bookings/farm/:farmId', auth, async (req, res) => {
   try {
     const bookings = await Booking.findAll({
@@ -302,78 +451,70 @@ app.get('/api/bookings/farm/:farmId', auth, async (req, res) => {
   }
 });
 
-// ========== Tasks endpoints ==========
-app.get('/api/tasks', auth, async (req, res) => {
+// ========== Reviews endpoints ==========
+app.get('/api/reviews/farm/:farmId', async (req, res) => {
   try {
-    const { status, priority, farm_id } = req.query;
-    let whereClause = {};
-    
-    if (status === 'completed') {
-      whereClause.is_completed = true;
-    } else if (status === 'pending') {
-      whereClause.is_completed = false;
-    }
-    
-    if (priority && priority !== 'all') {
-      whereClause.priority = priority;
-    }
-    
-    if (farm_id && farm_id !== 'all') {
-      whereClause.farm_id = farm_id;
-    }
-    
-    const tasks = await Task.findAll({
-      where: whereClause,
-      include: [{ model: Farm, as: 'farm' }],
-      order: [['due_date', 'ASC']]
+    const reviews = await Review.findAll({
+      where: { farm_id: req.params.farmId },
+      include: [{ model: User, as: 'user', attributes: ['id', 'name', 'avatar_url'] }],
+      order: [['createdAt', 'DESC']]
     });
-    res.json(tasks);
+    res.json(reviews);
   } catch (error) {
-    console.error('Error fetching tasks:', error);
+    console.error('Error fetching reviews:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
 
-app.post('/api/tasks', auth, async (req, res) => {
+app.post('/api/reviews', auth, async (req, res) => {
   try {
-    const { title, description, due_date, priority, task_type, farm_id } = req.body;
-    const task = await Task.create({
-      title,
-      description,
-      due_date,
-      priority: priority || 'medium',
-      task_type: task_type || 'other',
-      farm_id: farm_id || null,
-      assigned_to: req.userId,
-      is_completed: false
+    const { farm_id, rating, comment } = req.body;
+    
+    const hasCompletedBooking = await Booking.findOne({
+      where: {
+        farm_id: farm_id,
+        farmer_id: req.userId,
+        status: 'completed'
+      }
     });
-    res.json(task);
-  } catch (error) {
-    console.error('Error creating task:', error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
-app.put('/api/tasks/:id', auth, async (req, res) => {
-  try {
-    const task = await Task.findByPk(req.params.id);
-    if (!task) {
-      return res.status(404).json({ error: 'Задача не найдена' });
+    
+    if (!hasCompletedBooking && req.userRole !== 'admin') {
+      return res.status(403).json({ error: 'Вы можете оставить отзыв только после завершения бронирования' });
     }
-    await task.update(req.body);
-    res.json(task);
+    
+    const existingReview = await Review.findOne({
+      where: {
+        farm_id: farm_id,
+        user_id: req.userId
+      }
+    });
+    
+    if (existingReview && req.userRole !== 'admin') {
+      return res.status(403).json({ error: 'Вы уже оставляли отзыв на эту ферму' });
+    }
+    
+    const review = await Review.create({
+      id: uuidv4(),
+      farm_id,
+      user_id: req.userId,
+      rating,
+      comment
+    });
+    
+    const allReviews = await Review.findAll({ where: { farm_id } });
+    const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
+    
+    await Farm.update(
+      { 
+        rating: parseFloat(avgRating.toFixed(1)),
+        total_reviews: allReviews.length
+      },
+      { where: { id: farm_id } }
+    );
+    
+    res.json({ success: true, review, message: 'Спасибо за отзыв!' });
   } catch (error) {
-    console.error('Error updating task:', error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
-app.delete('/api/tasks/:id', auth, async (req, res) => {
-  try {
-    await Task.destroy({ where: { id: req.params.id } });
-    res.status(204).send();
-  } catch (error) {
-    console.error('Error deleting task:', error);
+    console.error('Error creating review:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -383,19 +524,28 @@ app.get('/api/reports/financial', auth, async (req, res) => {
   try {
     const { startDate, endDate, farmId } = req.query;
     let whereClause = {};
+    
     if (farmId && farmId !== '') whereClause.farm_id = farmId;
+    if (startDate) whereClause.start_date = { [Op.gte]: startDate };
+    if (endDate) whereClause.end_date = { [Op.lte]: endDate };
     
     const bookings = await Booking.findAll({
       where: whereClause,
-      include: [{ model: Farm, as: 'farm' }]
+      include: [{ model: Farm, as: 'farm' }],
+      order: [['createdAt', 'DESC']]
     });
     
     const totalRevenue = bookings.reduce((sum, b) => sum + Number(b.total_price), 0);
     
     res.json({
       bookings: bookings.map(b => ({
-        ...b.toJSON(),
-        farm_name: b.farm?.name
+        id: b.id,
+        farm_name: b.farm?.name,
+        start_date: b.start_date,
+        end_date: b.end_date,
+        total_price: b.total_price,
+        status: b.status,
+        created_at: b.createdAt
       })),
       summary: {
         total_bookings: bookings.length,
@@ -404,7 +554,7 @@ app.get('/api/reports/financial', auth, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error(error);
+    console.error('Error generating financial report:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -412,6 +562,7 @@ app.get('/api/reports/financial', auth, async (req, res) => {
 app.get('/api/reports/tasks', auth, async (req, res) => {
   try {
     const tasks = await Task.findAll({
+      where: { assigned_to: req.userId },
       include: [{ model: Farm, as: 'farm' }]
     });
     
@@ -435,21 +586,31 @@ app.get('/api/reports/tasks', auth, async (req, res) => {
 
 app.get('/api/reports/yield', auth, async (req, res) => {
   try {
-    const mockYieldData = {
-      crops: [
-        { id: 'c1', crop_name: 'Пшеница', farm_name: 'Зелёная долина', area_hectares: 2.5, yield_kg: 8750, yield_per_hectare: 3500, target_yield: 4000 },
-        { id: 'c2', crop_name: 'Кукуруза', farm_name: 'Урожайное поле', area_hectares: 3.0, yield_kg: 15000, yield_per_hectare: 5000, target_yield: 5500 },
-        { id: 'c3', crop_name: 'Подсолнечник', farm_name: 'Лесная поляна', area_hectares: 1.5, yield_kg: 3750, yield_per_hectare: 2500, target_yield: 3000 },
-      ],
+    const farms = await Farm.findAll({
+      where: { is_available: true },
+      limit: 5
+    });
+    
+    const cropsData = farms.map((farm, index) => ({
+      id: `crop_${index}`,
+      crop_name: ['Пшеница', 'Кукуруза', 'Подсолнечник'][index % 3],
+      farm_name: farm.name,
+      area_hectares: parseFloat(farm.area_hectares),
+      yield_kg: Math.round(parseFloat(farm.area_hectares) * 3500),
+      yield_per_hectare: 3500,
+      target_yield: 4000
+    }));
+    
+    res.json({
+      crops: cropsData,
       summary: {
-        total_crops: 3,
-        total_yield: 27500,
-        avg_yield: 3667
+        total_crops: cropsData.length,
+        total_yield: cropsData.reduce((sum, c) => sum + c.yield_kg, 0),
+        avg_yield: 3500
       }
-    };
-    res.json(mockYieldData);
+    });
   } catch (error) {
-    console.error(error);
+    console.error('Error generating yield report:', error);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
 });
@@ -457,6 +618,7 @@ app.get('/api/reports/yield', auth, async (req, res) => {
 app.post('/api/reports', auth, async (req, res) => {
   try {
     const report = await Report.create({
+      id: uuidv4(),
       ...req.body,
       user_id: req.userId
     });
@@ -516,6 +678,7 @@ app.post('/api/chat/send', auth, async (req, res) => {
   try {
     const { to_user_id, message } = req.body;
     const newMessage = await Message.create({
+      id: uuidv4(),
       from_user_id: req.userId,
       to_user_id,
       message,
@@ -531,11 +694,10 @@ app.post('/api/chat/send', auth, async (req, res) => {
 // ========== Fertilizer Shop endpoints ==========
 app.get('/api/fertilizer/products', async (req, res) => {
   const products = [
-    { id: 1, name: 'Аммиачная селитра', type: 'Азотное', price: 2500, unit: 'кг', inStock: 500 },
-    { id: 2, name: 'Суперфосфат', type: 'Фосфорное', price: 1800, unit: 'кг', inStock: 300 },
-    { id: 3, name: 'Калийная соль', type: 'Калийное', price: 2200, unit: 'кг', inStock: 400 },
-    { id: 4, name: 'Нитроаммофоска', type: 'Комплексное', price: 3000, unit: 'кг', inStock: 600 },
-    { id: 5, name: 'Мочевина', type: 'Азотное', price: 2800, unit: 'кг', inStock: 350 }
+    { id: 1, name: 'Аммиачная селитра', type: 'Азотное', price: 2500, unit: 'кг', inStock: 500, rating: 4.8, image: 'https://images.unsplash.com/photo-1585921805752-5a2a2b6d4c3f?w=300' },
+    { id: 2, name: 'Суперфосфат', type: 'Фосфорное', price: 1800, unit: 'кг', inStock: 300, rating: 4.6, image: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=300' },
+    { id: 3, name: 'Калийная соль', type: 'Калийное', price: 2200, unit: 'кг', inStock: 400, rating: 4.7, image: 'https://images.unsplash.com/photo-1585921805752-5a2a2b6d4c3f?w=300' },
+    { id: 4, name: 'Нитроаммофоска', type: 'Комплексное', price: 3000, unit: 'кг', inStock: 600, rating: 4.9, image: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=300' }
   ];
   res.json(products);
 });
@@ -544,6 +706,7 @@ app.post('/api/fertilizer/order', auth, async (req, res) => {
   try {
     const { items, total, delivery_address } = req.body;
     const order = await FertilizerOrder.create({
+      id: uuidv4(),
       user_id: req.userId,
       items,
       total,
@@ -570,21 +733,6 @@ app.get('/api/admin/users', auth, adminAuth, async (req, res) => {
   }
 });
 
-app.put('/api/admin/users/:userId/role', auth, adminAuth, async (req, res) => {
-  try {
-    const { role } = req.body;
-    const user = await User.findByPk(req.params.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'Пользователь не найден' });
-    }
-    await user.update({ role });
-    res.json(user);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
 app.patch('/api/admin/users/:userId/block', auth, adminAuth, async (req, res) => {
   try {
     const { isBlocked } = req.body;
@@ -593,6 +741,21 @@ app.patch('/api/admin/users/:userId/block', auth, adminAuth, async (req, res) =>
       return res.status(404).json({ error: 'Пользователь не найден' });
     }
     await user.update({ is_blocked: isBlocked });
+    res.json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+app.put('/api/admin/users/:userId/role', auth, adminAuth, async (req, res) => {
+  try {
+    const { role } = req.body;
+    const user = await User.findByPk(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+    await user.update({ role });
     res.json(user);
   } catch (error) {
     console.error(error);
@@ -622,6 +785,48 @@ app.get('/api/admin/farms', auth, adminAuth, async (req, res) => {
   }
 });
 
+app.post('/api/admin/farms', auth, adminAuth, async (req, res) => {
+  try {
+    const {
+      name,
+      location,
+      area_hectares,
+      price_per_month,
+      soil_type,
+      water_access,
+      electricity,
+      description,
+      owner_id
+    } = req.body;
+
+    if (!name || !location || !area_hectares || !price_per_month) {
+      return res.status(400).json({ error: 'Заполните обязательные поля' });
+    }
+
+    const farm = await Farm.create({
+      id: uuidv4(),
+      name,
+      location,
+      area_hectares: parseFloat(area_hectares),
+      price_per_month: parseFloat(price_per_month),
+      soil_type: soil_type || null,
+      water_access: water_access || false,
+      electricity: electricity || false,
+      description: description || null,
+      owner_id: owner_id || null,
+      is_available: true,
+      images: ['https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400'],
+      rating: 0,
+      total_reviews: 0
+    });
+
+    res.status(201).json({ success: true, farm, message: 'Ферма успешно создана' });
+  } catch (error) {
+    console.error('Error creating farm:', error);
+    res.status(500).json({ error: 'Ошибка при создании фермы' });
+  }
+});
+
 app.delete('/api/admin/farms/:farmId', auth, adminAuth, async (req, res) => {
   try {
     await Farm.destroy({ where: { id: req.params.farmId } });
@@ -638,9 +843,54 @@ app.get('/api/admin/bookings', auth, adminAuth, async (req, res) => {
       include: [
         { model: Farm, as: 'farm' },
         { model: User, as: 'farmer', attributes: ['id', 'name', 'email'] }
-      ]
+      ],
+      order: [['createdAt', 'DESC']]
     });
     res.json({ bookings, total: bookings.length });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+app.post('/api/admin/bookings', auth, adminAuth, async (req, res) => {
+  try {
+    const {
+      farm_id,
+      farmer_id,
+      start_date,
+      end_date,
+      total_price,
+      notes,
+      status
+    } = req.body;
+
+    if (!farm_id || !farmer_id || !start_date || !end_date || !total_price) {
+      return res.status(400).json({ error: 'Заполните обязательные поля' });
+    }
+
+    const booking = await Booking.create({
+      id: uuidv4(),
+      farm_id,
+      farmer_id,
+      start_date,
+      end_date,
+      total_price: parseFloat(total_price),
+      notes: notes || null,
+      status: status || 'pending'
+    });
+
+    res.status(201).json({ success: true, booking, message: 'Бронирование успешно создано' });
+  } catch (error) {
+    console.error('Error creating booking:', error);
+    res.status(500).json({ error: 'Ошибка при создании бронирования' });
+  }
+});
+
+app.delete('/api/admin/bookings/:bookingId', auth, adminAuth, async (req, res) => {
+  try {
+    await Booking.destroy({ where: { id: req.params.bookingId } });
+    res.status(204).send();
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Ошибка сервера' });
@@ -669,49 +919,16 @@ app.get('/api/admin/stats', auth, adminAuth, async (req, res) => {
   }
 });
 
-// ========== Reviews endpoints ==========
-app.get('/api/reviews/farm/:farmId', async (req, res) => {
-  try {
-    res.json([]);
-  } catch (error) {
-    console.error('Error fetching reviews:', error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
-app.post('/api/reviews', auth, async (req, res) => {
-  try {
-    const { farm_id, rating, comment } = req.body;
-    
-    const farm = await Farm.findByPk(farm_id);
-    if (farm) {
-      const newRating = (farm.rating * farm.total_reviews + rating) / (farm.total_reviews + 1);
-      await farm.update({
-        rating: parseFloat(newRating.toFixed(1)),
-        total_reviews: farm.total_reviews + 1
-      });
-    }
-    
-    res.json({ success: true, message: 'Спасибо за отзыв!' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
-// Отправка отчета на email (заглушка)
-app.post('/api/reports/send-email', auth, async (req, res) => {
-  try {
-    const { to, reportType, reportData, period } = req.body;
-    console.log(`Email would be sent to ${to} with report ${reportType}`);
-    res.json({ success: true, message: 'Отчет отправлен на email (демо режим)' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
-
 // Запуск сервера
 app.listen(PORT, () => {
   console.log(`🚀 Сервер запущен на http://localhost:${PORT}`);
+  console.log('📋 Доступные эндпоинты:');
+  console.log('   POST /api/login');
+  console.log('   POST /api/register');
+  console.log('   GET  /api/farms');
+  console.log('   GET  /api/tasks');
+  console.log('   POST /api/tasks');
+  console.log('   GET  /api/bookings/my');
+  console.log('   GET  /api/reports/financial');
+  console.log('   GET  /api/reports/tasks');
 });

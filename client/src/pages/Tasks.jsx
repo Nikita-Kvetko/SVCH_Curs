@@ -8,7 +8,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardActions,
   TextField,
   Dialog,
   DialogTitle,
@@ -38,7 +37,6 @@ import {
   RadioButtonUnchecked as UncheckedIcon,
   PriorityHigh as PriorityHighIcon,
   Flag as FlagIcon,
-  Today as TodayIcon,
   CalendarToday as CalendarIcon,
   FilterList as FilterIcon,
   Clear as ClearIcon,
@@ -69,8 +67,8 @@ export default function Tasks() {
   const [editingTask, setEditingTask] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [user, setUser] = useState(null);
+  const [farmsLoading, setFarmsLoading] = useState(true);
   
-  // Фильтры
   const [filters, setFilters] = useState({
     status: 'all',
     priority: 'all',
@@ -78,7 +76,6 @@ export default function Tasks() {
   });
   const [showFilters, setShowFilters] = useState(false);
   
-  // Форма задачи
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -95,12 +92,12 @@ export default function Tasks() {
   };
 
   const taskTypes = [
-    { value: 'planting', label: '🌱 Посадка', icon: '🌱' },
-    { value: 'watering', label: '💧 Полив', icon: '💧' },
-    { value: 'fertilizing', label: '🌾 Удобрение', icon: '🌾' },
-    { value: 'harvesting', label: '🚜 Сбор урожая', icon: '🚜' },
-    { value: 'maintenance', label: '🔧 Обслуживание', icon: '🔧' },
-    { value: 'other', label: '📋 Другое', icon: '📋' },
+    { value: 'planting', label: 'Посадка', icon: '🌱' },
+    { value: 'watering', label: 'Полив', icon: '💧' },
+    { value: 'fertilizing', label: 'Удобрение', icon: '🌾' },
+    { value: 'harvesting', label: 'Сбор урожая', icon: '🚜' },
+    { value: 'maintenance', label: 'Обслуживание', icon: '🔧' },
+    { value: 'other', label: 'Другое', icon: '📋' },
   ];
 
   useEffect(() => {
@@ -132,11 +129,41 @@ export default function Tasks() {
   };
 
   const fetchFarms = async () => {
+    setFarmsLoading(true);
     try {
-      const response = await axios.get('/farms/my');
-      setFarms(response.data);
+      // Пробуем получить все фермы через основной эндпоинт
+      const response = await axios.get('/farms');
+      console.log('Все фермы из /farms:', response.data);
+      
+      if (response.data && response.data.length > 0) {
+        setFarms(response.data);
+        if (!formData.farm_id) {
+          setFormData(prev => ({ ...prev, farm_id: response.data[0].id }));
+        }
+      } else {
+        // Если нет ферм, показываем сообщение
+        showMessage('Нет доступных ферм. Обратитесь к администратору.', 'warning');
+      }
     } catch (error) {
       console.error('Error fetching farms:', error);
+      console.error('Error details:', error.response?.data);
+      showMessage('Ошибка загрузки списка ферм: ' + (error.response?.data?.error || error.message), 'error');
+      
+      // Пробуем альтернативный эндпоинт
+      try {
+        const altResponse = await axios.get('/farms/my');
+        console.log('Фермы из /farms/my:', altResponse.data);
+        if (altResponse.data && altResponse.data.length > 0) {
+          setFarms(altResponse.data);
+          if (!formData.farm_id) {
+            setFormData(prev => ({ ...prev, farm_id: altResponse.data[0].id }));
+          }
+        }
+      } catch (altError) {
+        console.error('Alternative endpoint also failed:', altError);
+      }
+    } finally {
+      setFarmsLoading(false);
     }
   };
 
@@ -174,27 +201,48 @@ export default function Tasks() {
     setEditingTask(null);
   };
 
-  const handleSaveTask = async () => {
-    if (!formData.title.trim()) {
-      showMessage('Введите название задачи', 'error');
-      return;
+  // Замените функцию handleSaveTask в Tasks.jsx
+
+const handleSaveTask = async () => {
+  // Валидация
+  if (!formData.title || !formData.title.trim()) {
+    showMessage('Введите название задачи', 'error');
+    return;
+  }
+  
+  // Подготовка данных для отправки
+  const taskData = {
+    title: formData.title.trim(),
+    description: formData.description || null,
+    due_date: formData.due_date || null,
+    priority: formData.priority || 'medium',
+    task_type: formData.task_type || 'other',
+    farm_id: formData.farm_id || null
+  };
+  
+  console.log('Отправка данных задачи:', taskData);
+  
+  try {
+    let response;
+    if (editingTask) {
+      response = await axios.put(`/tasks/${editingTask.id}`, taskData);
+      showMessage('Задача обновлена');
+    } else {
+      response = await axios.post('/tasks', taskData);
+      showMessage('Задача создана');
     }
     
-    try {
-      if (editingTask) {
-        await axios.put(`/tasks/${editingTask.id}`, formData);
-        showMessage('Задача обновлена');
-      } else {
-        await axios.post('/tasks', formData);
-        showMessage('Задача создана');
-      }
-      handleCloseDialog();
-      fetchTasks();
-    } catch (error) {
-      console.error('Error saving task:', error);
-      showMessage('Ошибка сохранения задачи', 'error');
-    }
-  };
+    console.log('Ответ сервера:', response.data);
+    handleCloseDialog();
+    fetchTasks(); // Обновляем список задач
+  } catch (error) {
+    console.error('Error saving task:', error);
+    console.error('Детали ошибки:', error.response?.data);
+    
+    const errorMessage = error.response?.data?.error || 'Ошибка сохранения задачи';
+    showMessage(errorMessage, 'error');
+  }
+};
 
   const handleDeleteTask = async (taskId) => {
     if (window.confirm('Удалить задачу?')) {
@@ -358,197 +406,173 @@ export default function Tasks() {
     : 0;
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Заголовок */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
-        <Typography variant="h4" component="h1">
-          Мои задачи
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button
-            variant={showFilters ? 'contained' : 'outlined'}
-            startIcon={<FilterIcon />}
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            Фильтры
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
-          >
-            Новая задача
-          </Button>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+          <Typography variant="h4" component="h1">
+            Мои задачи
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant={showFilters ? 'contained' : 'outlined'}
+              startIcon={<FilterIcon />}
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              Фильтры
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenDialog()}
+            >
+              Новая задача
+            </Button>
+          </Box>
         </Box>
-      </Box>
 
-      {/* Прогресс */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Typography variant="body2" gutterBottom>
-          Общий прогресс: {tasks.filter(t => t.is_completed).length} из {tasks.length} задач выполнено
-        </Typography>
-        <LinearProgress 
-          variant="determinate" 
-          value={completedPercentage} 
-          sx={{ height: 8, borderRadius: 4 }}
-        />
-      </Paper>
-
-      {/* Фильтры */}
-      {showFilters && (
         <Paper sx={{ p: 2, mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>Фильтры задач</Typography>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Статус</InputLabel>
-                <Select
-                  value={filters.status}
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                  label="Статус"
-                >
-                  <MenuItem value="all">Все</MenuItem>
-                  <MenuItem value="pending">В работе</MenuItem>
-                  <MenuItem value="completed">Выполненные</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Приоритет</InputLabel>
-                <Select
-                  value={filters.priority}
-                  onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                  label="Приоритет"
-                >
-                  <MenuItem value="all">Все</MenuItem>
-                  <MenuItem value="high">Высокий</MenuItem>
-                  <MenuItem value="medium">Средний</MenuItem>
-                  <MenuItem value="low">Низкий</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Ферма</InputLabel>
-                <Select
-                  value={filters.farmId}
-                  onChange={(e) => setFilters({ ...filters, farmId: e.target.value })}
-                  label="Ферма"
-                >
-                  <MenuItem value="all">Все фермы</MenuItem>
-                  {farms.map(farm => (
-                    <MenuItem key={farm.id} value={farm.id}>{farm.name}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <Button fullWidth variant="outlined" onClick={resetFilters} startIcon={<ClearIcon />}>
-                Сбросить фильтры
-              </Button>
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
-
-      {/* Статистика */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-        <Paper sx={{ px: 3, py: 1.5, textAlign: 'center', flex: 1 }}>
-          <Typography variant="h4">{tasksByStatus.all.length}</Typography>
-          <Typography variant="caption">Всего задач</Typography>
-        </Paper>
-        <Paper sx={{ px: 3, py: 1.5, textAlign: 'center', flex: 1, bgcolor: '#fff3e0' }}>
-          <Typography variant="h4" color="warning.main">{tasksByStatus.pending.length}</Typography>
-          <Typography variant="caption">В работе</Typography>
-        </Paper>
-        <Paper sx={{ px: 3, py: 1.5, textAlign: 'center', flex: 1, bgcolor: '#e8f5e9' }}>
-          <Typography variant="h4" color="success.main">{tasksByStatus.completed.length}</Typography>
-          <Typography variant="caption">Выполнено</Typography>
-        </Paper>
-        <Paper sx={{ px: 3, py: 1.5, textAlign: 'center', flex: 1, bgcolor: '#ffebee' }}>
-          <Typography variant="h4" color="error.main">{tasksByStatus.overdue.length}</Typography>
-          <Typography variant="caption">Просрочено</Typography>
-        </Paper>
-      </Box>
-
-      {/* Вкладки задач */}
-      <Paper sx={{ width: '100%' }}>
-        <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
-          <Tab label="Все задачи" />
-          <Tab 
-            label={
-              <Badge badgeContent={tasksByStatus.pending.length} color="warning" sx={{ mr: 1 }}>
-                В работе
-              </Badge>
-            } 
+          <Typography variant="body2" gutterBottom>
+            Общий прогресс: {tasks.filter(t => t.is_completed).length} из {tasks.length} задач выполнено
+          </Typography>
+          <LinearProgress 
+            variant="determinate" 
+            value={completedPercentage} 
+            sx={{ height: 8, borderRadius: 4 }}
           />
-          <Tab 
-            label={
-              <Badge badgeContent={tasksByStatus.completed.length} color="success">
-                Выполненные
-              </Badge>
-            } 
-          />
-          <Tab 
-            label={
-              <Badge badgeContent={tasksByStatus.overdue.length} color="error">
-                Просроченные
-              </Badge>
-            } 
-          />
-        </Tabs>
+        </Paper>
 
-        <Box sx={{ p: 3 }}>
-          {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <>
-              <TabPanel value={tabValue} index={0}>
-                {tasksByStatus.all.length === 0 ? (
-                  <Alert severity="info">У вас пока нет задач. Создайте первую задачу!</Alert>
-                ) : (
-                  tasksByStatus.all.map(task => <TaskCard key={task.id} task={task} />)
-                )}
-              </TabPanel>
-              
-              <TabPanel value={tabValue} index={1}>
-                {tasksByStatus.pending.length === 0 ? (
-                  <Alert severity="info">Нет активных задач</Alert>
-                ) : (
-                  tasksByStatus.pending.map(task => <TaskCard key={task.id} task={task} />)
-                )}
-              </TabPanel>
-              
-              <TabPanel value={tabValue} index={2}>
-                {tasksByStatus.completed.length === 0 ? (
-                  <Alert severity="info">Нет выполненных задач</Alert>
-                ) : (
-                  tasksByStatus.completed.map(task => <TaskCard key={task.id} task={task} />)
-                )}
-              </TabPanel>
-              
-              <TabPanel value={tabValue} index={3}>
-                {tasksByStatus.overdue.length === 0 ? (
-                  <Alert severity="info">Нет просроченных задач</Alert>
-                ) : (
-                  tasksByStatus.overdue.map(task => <TaskCard key={task.id} task={task} />)
-                )}
-              </TabPanel>
-            </>
-          )}
+        {showFilters && (
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Typography variant="subtitle1" gutterBottom>Фильтры задач</Typography>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Статус</InputLabel>
+                  <Select
+                    value={filters.status}
+                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                    label="Статус"
+                  >
+                    <MenuItem value="all">Все</MenuItem>
+                    <MenuItem value="pending">В работе</MenuItem>
+                    <MenuItem value="completed">Выполненные</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Приоритет</InputLabel>
+                  <Select
+                    value={filters.priority}
+                    onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
+                    label="Приоритет"
+                  >
+                    <MenuItem value="all">Все</MenuItem>
+                    <MenuItem value="high">Высокий</MenuItem>
+                    <MenuItem value="medium">Средний</MenuItem>
+                    <MenuItem value="low">Низкий</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Ферма</InputLabel>
+                  <Select
+                    value={filters.farmId}
+                    onChange={(e) => setFilters({ ...filters, farmId: e.target.value })}
+                    label="Ферма"
+                  >
+                    <MenuItem value="all">Все фермы</MenuItem>
+                    {farms.map(farm => (
+                      <MenuItem key={farm.id} value={farm.id}>{farm.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <Button fullWidth variant="outlined" onClick={resetFilters} startIcon={<ClearIcon />}>
+                  Сбросить фильтры
+                </Button>
+              </Grid>
+            </Grid>
+          </Paper>
+        )}
+
+        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+          <Paper sx={{ px: 3, py: 1.5, textAlign: 'center', flex: 1 }}>
+            <Typography variant="h4">{tasksByStatus.all.length}</Typography>
+            <Typography variant="caption">Всего задач</Typography>
+          </Paper>
+          <Paper sx={{ px: 3, py: 1.5, textAlign: 'center', flex: 1, bgcolor: '#fff3e0' }}>
+            <Typography variant="h4" color="warning.main">{tasksByStatus.pending.length}</Typography>
+            <Typography variant="caption">В работе</Typography>
+          </Paper>
+          <Paper sx={{ px: 3, py: 1.5, textAlign: 'center', flex: 1, bgcolor: '#e8f5e9' }}>
+            <Typography variant="h4" color="success.main">{tasksByStatus.completed.length}</Typography>
+            <Typography variant="caption">Выполнено</Typography>
+          </Paper>
+          <Paper sx={{ px: 3, py: 1.5, textAlign: 'center', flex: 1, bgcolor: '#ffebee' }}>
+            <Typography variant="h4" color="error.main">{tasksByStatus.overdue.length}</Typography>
+            <Typography variant="caption">Просрочено</Typography>
+          </Paper>
         </Box>
-      </Paper>
 
-      {/* Диалог создания/редактирования задачи */}
-      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingTask ? 'Редактировать задачу' : 'Новая задача'}
-        </DialogTitle>
-        <DialogContent>
-          <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Paper sx={{ width: '100%' }}>
+          <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
+            <Tab label="Все задачи" />
+            <Tab label={`В работе (${tasksByStatus.pending.length})`} />
+            <Tab label={`Выполненные (${tasksByStatus.completed.length})`} />
+            <Tab label={`Просроченные (${tasksByStatus.overdue.length})`} />
+          </Tabs>
+
+          <Box sx={{ p: 3 }}>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <>
+                <TabPanel value={tabValue} index={0}>
+                  {tasksByStatus.all.length === 0 ? (
+                    <Alert severity="info">У вас пока нет задач. Создайте первую задачу!</Alert>
+                  ) : (
+                    tasksByStatus.all.map(task => <TaskCard key={task.id} task={task} />)
+                  )}
+                </TabPanel>
+                
+                <TabPanel value={tabValue} index={1}>
+                  {tasksByStatus.pending.length === 0 ? (
+                    <Alert severity="info">Нет активных задач</Alert>
+                  ) : (
+                    tasksByStatus.pending.map(task => <TaskCard key={task.id} task={task} />)
+                  )}
+                </TabPanel>
+                
+                <TabPanel value={tabValue} index={2}>
+                  {tasksByStatus.completed.length === 0 ? (
+                    <Alert severity="info">Нет выполненных задач</Alert>
+                  ) : (
+                    tasksByStatus.completed.map(task => <TaskCard key={task.id} task={task} />)
+                  )}
+                </TabPanel>
+                
+                <TabPanel value={tabValue} index={3}>
+                  {tasksByStatus.overdue.length === 0 ? (
+                    <Alert severity="info">Нет просроченных задач</Alert>
+                  ) : (
+                    tasksByStatus.overdue.map(task => <TaskCard key={task.id} task={task} />)
+                  )}
+                </TabPanel>
+              </>
+            )}
+          </Box>
+        </Paper>
+
+        <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            {editingTask ? 'Редактировать задачу' : 'Новая задача'}
+          </DialogTitle>
+          <DialogContent>
             <Grid container spacing={2} sx={{ mt: 0 }}>
               <Grid item xs={12}>
                 <TextField
@@ -614,35 +638,46 @@ export default function Tasks() {
                     value={formData.farm_id}
                     onChange={(e) => setFormData({ ...formData, farm_id: e.target.value })}
                     label="Ферма"
+                    disabled={farmsLoading}
                   >
-                    {farms.map(farm => (
-                      <MenuItem key={farm.id} value={farm.id}>{farm.name}</MenuItem>
-                    ))}
+                    {farmsLoading ? (
+                      <MenuItem disabled>Загрузка ферм...</MenuItem>
+                    ) : farms.length === 0 ? (
+                      <MenuItem disabled>Нет доступных ферм</MenuItem>
+                    ) : (
+                      farms.map(farm => (
+                        <MenuItem key={farm.id} value={farm.id}>{farm.name}</MenuItem>
+                      ))
+                    )}
                   </Select>
                 </FormControl>
+                {!farmsLoading && farms.length === 0 && (
+                  <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
+                    Нет доступных ферм. Обратитесь к администратору для добавления ферм.
+                  </Typography>
+                )}
               </Grid>
             </Grid>
-          </LocalizationProvider>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Отмена</Button>
-          <Button variant="contained" onClick={handleSaveTask}>
-            {editingTask ? 'Сохранить' : 'Создать'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog}>Отмена</Button>
+            <Button variant="contained" onClick={handleSaveTask}>
+              {editingTask ? 'Сохранить' : 'Создать'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
-      {/* Snackbar для уведомлений */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={3000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </Container>
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={3000}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+      </Container>
+    </LocalizationProvider>
   );
 }

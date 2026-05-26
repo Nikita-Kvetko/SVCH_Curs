@@ -32,6 +32,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import axios from '../api/axiosConfig';
 
 // Данные удобрений с реальными картинками
+// Замените массив fertilizers на этот (примерно строка 15-80)
+
 const fertilizers = [
   {
     id: 1,

@@ -43,7 +43,6 @@ import {
   Download,
   Visibility,
   Close,
-  Email,
 } from '@mui/icons-material';
 import { Bar, Line } from 'react-chartjs-2';
 import {
@@ -62,7 +61,6 @@ import axios from '../api/axiosConfig';
 import { exportToPDF, exportToExcel, formatCurrency, formatDate } from '../utils/exportUtils';
 import dayjs from 'dayjs';
 
-// Регистрация компонентов ChartJS
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -90,20 +88,17 @@ export default function Reports() {
   const [savedReports, setSavedReports] = useState([]);
   const [user, setUser] = useState(null);
 
-  // Период отчёта
   const [dateRange, setDateRange] = useState({
     startDate: dayjs().subtract(30, 'day').format('YYYY-MM-DD'),
     endDate: dayjs().format('YYYY-MM-DD'),
   });
 
-  // Данные отчётов
   const [financialData, setFinancialData] = useState(null);
   const [tasksData, setTasksData] = useState(null);
   const [yieldData, setYieldData] = useState(null);
   const [selectedFarm, setSelectedFarm] = useState('');
   const [farms, setFarms] = useState([]);
 
-  // Состояние сохранения
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewData, setPreviewData] = useState(null);
@@ -139,7 +134,6 @@ export default function Reports() {
     }
   };
 
-  // Финансовый отчёт
   const generateFinancialReport = async () => {
     setLoading(true);
     try {
@@ -158,7 +152,6 @@ export default function Reports() {
     }
   };
 
-  // Отчёт по задачам
   const generateTasksReport = async () => {
     setLoading(true);
     try {
@@ -177,7 +170,6 @@ export default function Reports() {
     }
   };
 
-  // Отчёт по урожайности
   const generateYieldReport = async () => {
     setLoading(true);
     try {
@@ -196,7 +188,6 @@ export default function Reports() {
     }
   };
 
-  // Сохранение отчёта
   const saveReport = async (reportType, data) => {
     setSaving(true);
     try {
@@ -217,29 +208,6 @@ export default function Reports() {
     }
   };
 
-  // Отправка на email
-  const handleSendEmail = async (reportType, data) => {
-    const userEmail = user?.email;
-    if (!userEmail) {
-      alert('Email пользователя не найден');
-      return;
-    }
-    
-    try {
-      await axios.post('/reports/send-email', {
-        to: userEmail,
-        reportType,
-        reportData: data,
-        period: dateRange
-      });
-      alert('Отчет отправлен на ваш email!');
-    } catch (error) {
-      console.error('Error sending email:', error);
-      alert('Ошибка отправки email');
-    }
-  };
-
-  // Экспорт в PDF
   const handleExportPDF = (type, data) => {
     let columns = [];
     let tableData = [];
@@ -279,7 +247,6 @@ export default function Reports() {
     exportToPDF(tableData, title, columns, `${title.toLowerCase().replace(/ /g, '_')}`);
   };
 
-  // Экспорт в Excel
   const handleExportExcel = (type, data) => {
     let columns = [];
     let tableData = [];
@@ -320,7 +287,6 @@ export default function Reports() {
     exportToExcel(tableData, title, columns, `${title.toLowerCase().replace(/ /g, '_')}`);
   };
 
-  // Данные для графика урожайности
   const getYieldChartData = () => {
     if (!yieldData?.crops) return null;
     return {
@@ -342,7 +308,6 @@ export default function Reports() {
     };
   };
 
-  // Данные для финансового графика
   const getFinancialChartData = () => {
     if (!financialData?.bookings) return null;
     const monthlyData = {};
@@ -395,7 +360,6 @@ export default function Reports() {
       </Box>
 
       {showHistory ? (
-        // История отчётов
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" gutterBottom>Сохранённые отчёты</Typography>
           <Divider sx={{ mb: 2 }} />
@@ -442,11 +406,6 @@ export default function Reports() {
                               <TableChart />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Отправить на Email">
-                            <IconButton size="small" onClick={() => handleSendEmail(report.report_type, report.data)}>
-                              <Email />
-                            </IconButton>
-                          </Tooltip>
                         </Box>
                       </Box>
                     </CardContent>
@@ -457,9 +416,7 @@ export default function Reports() {
           )}
         </Paper>
       ) : (
-        // Форма создания отчётов
         <>
-          {/* Выбор периода */}
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>Параметры отчёта</Typography>
             <Grid container spacing={2} alignItems="center">
@@ -515,7 +472,6 @@ export default function Reports() {
             </Grid>
           </Paper>
 
-          {/* Tabs отчётов */}
           <Paper sx={{ p: 3 }}>
             <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
               <Tab icon={<AttachMoney />} label="Финансовый отчёт" />
@@ -553,14 +509,6 @@ export default function Reports() {
                         sx={{ mr: 1 }}
                       >
                         Excel
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        startIcon={<Email />}
-                        onClick={() => handleSendEmail('financial', financialData)}
-                        sx={{ mr: 1 }}
-                      >
-                        Email
                       </Button>
                       <Button
                         variant="outlined"
@@ -681,14 +629,6 @@ export default function Reports() {
                         sx={{ mr: 1 }}
                       >
                         Excel
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        startIcon={<Email />}
-                        onClick={() => handleSendEmail('tasks', tasksData)}
-                        sx={{ mr: 1 }}
-                      >
-                        Email
                       </Button>
                       <Button
                         variant="outlined"
@@ -817,14 +757,6 @@ export default function Reports() {
                         </Button>
                         <Button
                           variant="outlined"
-                          startIcon={<Email />}
-                          onClick={() => handleSendEmail('yield', yieldData)}
-                          sx={{ mr: 1 }}
-                        >
-                          Email
-                        </Button>
-                        <Button
-                          variant="outlined"
                           startIcon={<Save />}
                           onClick={() => saveReport('yield', yieldData)}
                           disabled={saving}
@@ -914,7 +846,6 @@ export default function Reports() {
         </>
       )}
 
-      {/* Диалог предпросмотра отчёта */}
       <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

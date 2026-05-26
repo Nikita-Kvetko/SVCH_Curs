@@ -1,13 +1,12 @@
 const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
 
-// Подключение к БД
 const sequelize = new Sequelize(
-  process.env.DB_NAME,
-  process.env.DB_USER,
-  process.env.DB_PASSWORD,
+  process.env.DB_NAME || 'agri_coworking',
+  process.env.DB_USER || 'postgres',
+  process.env.DB_PASSWORD || 'postgres',
   {
-    host: process.env.DB_HOST,
+    host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 5432,
     dialect: 'postgres',
     logging: false,
@@ -19,8 +18,6 @@ const sequelize = new Sequelize(
     }
   }
 );
-
-// Определение моделей
 
 // 1. Пользователи
 const User = sequelize.define('User', {
@@ -173,7 +170,10 @@ const Crop = sequelize.define('Crop', {
   type: DataTypes.STRING,
   planting_season: DataTypes.STRING,
   harvest_season: DataTypes.STRING,
-  avg_yield_per_hectare: DataTypes.DECIMAL(10, 2),
+  avg_yield_per_hectare: {
+    type: DataTypes.DECIMAL(10, 2),
+    defaultValue: 0
+  },
   growing_days: DataTypes.INTEGER
 }, {
   timestamps: true,
@@ -282,7 +282,31 @@ const FertilizerOrder = sequelize.define('FertilizerOrder', {
   tableName: 'fertilizer_orders'
 });
 
-// Настройка связей между таблицами
+// 9. Отзывы (НОВАЯ ТАБЛИЦА)
+const Review = sequelize.define('Review', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  rating: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1,
+      max: 5
+    }
+  },
+  comment: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  }
+}, {
+  timestamps: true,
+  tableName: 'reviews'
+});
+
+// ========== СВЯЗИ МЕЖДУ ТАБЛИЦАМИ ==========
 
 // User -> Farm (владелец фермы)
 User.hasMany(Farm, { foreignKey: 'owner_id', as: 'owned_farms' });
@@ -326,7 +350,14 @@ Message.belongsTo(User, { foreignKey: 'to_user_id', as: 'receiver' });
 User.hasMany(FertilizerOrder, { foreignKey: 'user_id', as: 'fertilizer_orders' });
 FertilizerOrder.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
-// Экспорт
+// User -> Review
+User.hasMany(Review, { foreignKey: 'user_id', as: 'reviews' });
+Review.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// Farm -> Review
+Farm.hasMany(Review, { foreignKey: 'farm_id', as: 'reviews' });
+Review.belongsTo(Farm, { foreignKey: 'farm_id', as: 'farm' });
+
 module.exports = {
   sequelize,
   Sequelize,
@@ -337,5 +368,6 @@ module.exports = {
   Task,
   Report,
   Message,
-  FertilizerOrder
+  FertilizerOrder,
+  Review
 };
