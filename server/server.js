@@ -691,34 +691,8 @@ app.post('/api/chat/send', auth, async (req, res) => {
   }
 });
 
-// ========== Fertilizer Shop endpoints ==========
-app.get('/api/fertilizer/products', async (req, res) => {
-  const products = [
-    { id: 1, name: 'Аммиачная селитра', type: 'Азотное', price: 2500, unit: 'кг', inStock: 500, rating: 4.8, image: 'https://images.unsplash.com/photo-1585921805752-5a2a2b6d4c3f?w=300' },
-    { id: 2, name: 'Суперфосфат', type: 'Фосфорное', price: 1800, unit: 'кг', inStock: 300, rating: 4.6, image: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=300' },
-    { id: 3, name: 'Калийная соль', type: 'Калийное', price: 2200, unit: 'кг', inStock: 400, rating: 4.7, image: 'https://images.unsplash.com/photo-1585921805752-5a2a2b6d4c3f?w=300' },
-    { id: 4, name: 'Нитроаммофоска', type: 'Комплексное', price: 3000, unit: 'кг', inStock: 600, rating: 4.9, image: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=300' }
-  ];
-  res.json(products);
-});
 
-app.post('/api/fertilizer/order', auth, async (req, res) => {
-  try {
-    const { items, total, delivery_address } = req.body;
-    const order = await FertilizerOrder.create({
-      id: uuidv4(),
-      user_id: req.userId,
-      items,
-      total,
-      delivery_address,
-      status: 'pending'
-    });
-    res.json(order);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Ошибка сервера' });
-  }
-});
+
 
 // ========== Admin endpoints ==========
 app.get('/api/admin/users', auth, adminAuth, async (req, res) => {

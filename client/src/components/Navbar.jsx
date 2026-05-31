@@ -12,6 +12,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import MenuIcon from '@mui/icons-material/Menu';
+import StorefrontIcon from '@mui/icons-material/Storefront';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -34,6 +35,9 @@ export default function Navbar() {
   // Кнопки навигации для десктопа
   const NavButtons = () => (
     <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, mr: 2 }}>
+      <Button color="inherit" onClick={() => navigate('/farms')} startIcon={<StorefrontIcon />}>
+        Фермы
+      </Button>
       <Button color="inherit" onClick={() => navigate('/dashboard')} startIcon={<DashboardIcon />}>
         Кабинет
       </Button>
@@ -48,9 +52,6 @@ export default function Navbar() {
       </Button>
       <Button color="inherit" onClick={() => navigate('/chat')} startIcon={<ChatIcon />}>
         Чат
-      </Button>
-      <Button color="inherit" onClick={() => navigate('/shop')} startIcon={<ShoppingCartIcon />}>
-        Удобрения
       </Button>
       {user?.role === 'admin' && (
         <Button color="inherit" onClick={() => navigate('/admin')} startIcon={<AdminPanelSettingsIcon />}>
@@ -68,12 +69,12 @@ export default function Navbar() {
       onClose={() => setMobileMenuAnchor(null)}
       sx={{ display: { xs: 'block', md: 'none' } }}
     >
+      <MenuItem onClick={() => handleNavigate('/farms')}>Фермы</MenuItem>
       <MenuItem onClick={() => handleNavigate('/dashboard')}>Личный кабинет</MenuItem>
       <MenuItem onClick={() => handleNavigate('/tasks')}>Задачи</MenuItem>
       <MenuItem onClick={() => handleNavigate('/reports')}>Отчёты</MenuItem>
       <MenuItem onClick={() => handleNavigate('/bookings')}>Бронирования</MenuItem>
       <MenuItem onClick={() => handleNavigate('/chat')}>Чат</MenuItem>
-      <MenuItem onClick={() => handleNavigate('/shop')}>Магазин удобрений</MenuItem>
       {user?.role === 'admin' && (
         <MenuItem onClick={() => handleNavigate('/admin')}>Админ панель</MenuItem>
       )}
@@ -150,6 +151,9 @@ export default function Navbar() {
                   open={Boolean(anchorEl)}
                   onClose={() => setAnchorEl(null)}
                 >
+                  <MenuItem onClick={() => handleNavigate('/farms')}>
+                    <StorefrontIcon fontSize="small" sx={{ mr: 1 }} /> Фермы
+                  </MenuItem>
                   <MenuItem onClick={() => handleNavigate('/dashboard')}>
                     <DashboardIcon fontSize="small" sx={{ mr: 1 }} /> Личный кабинет
                   </MenuItem>
@@ -164,9 +168,6 @@ export default function Navbar() {
                   </MenuItem>
                   <MenuItem onClick={() => handleNavigate('/chat')}>
                     <ChatIcon fontSize="small" sx={{ mr: 1 }} /> Чат
-                  </MenuItem>
-                  <MenuItem onClick={() => handleNavigate('/shop')}>
-                    <ShoppingCartIcon fontSize="small" sx={{ mr: 1 }} /> Удобрения
                   </MenuItem>
                   {user?.role === 'admin' && (
                     <MenuItem onClick={() => handleNavigate('/admin')}>

@@ -12,7 +12,6 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Reports from './pages/Reports';
 import Chat from './pages/Chat';
-import FertilizerShop from './pages/FertilizerShop';
 import BookingsCalendar from './pages/BookingsCalendar';
 import AdminPanel from './pages/AdminPanel';
 import LandingPage from './pages/LandingPage';
@@ -97,14 +96,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/shop"
-              element={
-                <ProtectedRoute>
-                  <FertilizerShop />
-                </ProtectedRoute>
-              }
-            />
+            
             <Route
               path="/bookings"
               element={

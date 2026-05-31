@@ -254,35 +254,7 @@ const Message = sequelize.define('Message', {
   tableName: 'messages'
 });
 
-// 8. Заказы удобрений
-const FertilizerOrder = sequelize.define('FertilizerOrder', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  items: {
-    type: DataTypes.JSONB,
-    allowNull: false
-  },
-  total: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
-  },
-  delivery_address: {
-    type: DataTypes.TEXT,
-    allowNull: false
-  },
-  status: {
-    type: DataTypes.ENUM('pending', 'processing', 'shipped', 'delivered'),
-    defaultValue: 'pending'
-  }
-}, {
-  timestamps: true,
-  tableName: 'fertilizer_orders'
-});
-
-// 9. Отзывы (НОВАЯ ТАБЛИЦА)
+// 8. Отзывы
 const Review = sequelize.define('Review', {
   id: {
     type: DataTypes.UUID,
@@ -346,10 +318,6 @@ User.hasMany(Message, { foreignKey: 'to_user_id', as: 'received_messages' });
 Message.belongsTo(User, { foreignKey: 'from_user_id', as: 'sender' });
 Message.belongsTo(User, { foreignKey: 'to_user_id', as: 'receiver' });
 
-// User -> FertilizerOrder
-User.hasMany(FertilizerOrder, { foreignKey: 'user_id', as: 'fertilizer_orders' });
-FertilizerOrder.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
-
 // User -> Review
 User.hasMany(Review, { foreignKey: 'user_id', as: 'reviews' });
 Review.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
@@ -368,6 +336,5 @@ module.exports = {
   Task,
   Report,
   Message,
-  FertilizerOrder,
   Review
 };
