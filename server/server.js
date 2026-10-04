@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Donationware
+// Copyright (c) 2026 Кветко Н.В.
+
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
